@@ -10,7 +10,7 @@ var authedClient = new CoinbaseExchange.AuthenticatedClient(
   // 'https://api-public.sandbox.exchange.coinbase.com'
 );
 
-var tooLong = 60 * 5 //don't leave a buy order unfilled for more than 5 minutes
+var tooLong = 10 //don't leave a buy order unfilled for more than 10 seconds
 var qty = 0.02;
 var spread = 0.1;
 var lastprice = -1;
