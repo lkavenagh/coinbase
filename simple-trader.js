@@ -11,13 +11,15 @@ var authedClient = new CoinbaseExchange.AuthenticatedClient(
 );
 
 var tooLong = 60 * 5 //don't leave a buy order unfilled for more than 5 minutes
-var qty = 0.01;
-var spread = 0.01;
+var qty = 0.02;
+var spread = 0.1;
 var lastprice = -1;
 var nextOrderIsBuy = true;
 var usdBalance = 0;
 var btcBalance = 0;
 var timeSinceLastFill = 60;
+
+myPrint('Min profit on each cycle: $' + qty * spread);
 
 function cancelAll() {
   authedClient.getOrders(function(err, response, data){
@@ -104,6 +106,7 @@ function myPrint(text) {
   day = (day < 10 ? "0" : "") + day;
 
   console.log("[" + year + "-" + month + "-" + day + " " + hour + ":" + min + ":" + sec + "] " + text);
+  //console.log("[" + date.toISOString() + "] " + text);
 }
 
 function main() {
@@ -195,10 +198,3 @@ function main() {
   });
 }
 main();
-
-// authedClient.getAccounts(function(err, response, data){
-//   console.log(data);
-//   for (var i = 0; i < data.length; i++) {
-//     console.log(data[i]['currency'] == 'USD');
-//   }
-// });
