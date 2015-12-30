@@ -10,7 +10,9 @@ var authedClient = new CoinbaseExchange.AuthenticatedClient(
   // 'https://api-public.sandbox.exchange.coinbase.com'
 );
 
-var tooLong = 10 //don't leave a buy order unfilled for more than 10 seconds
+var tooLongBuy = 10 //don't leave a buy order unfilled for more than 10 seconds
+var tooLongSell = 60 * 5
+var redoSell = true;
 var qty = 0.02;
 var spread = 0.1;
 var lastprice = -1;
@@ -18,8 +20,6 @@ var nextOrderIsBuy = true;
 var usdBalance = 0;
 var btcBalance = 0;
 var timeSinceLastFill = 60;
-
-myPrint('Min profit on each cycle: $' + qty * spread);
 
 function cancelAll() {
   authedClient.getOrders(function(err, response, data){
@@ -40,6 +40,38 @@ function listAllOrders() {
     for (var i = 0; i < data.length; i++) {
       console.log(data[i])
     }
+  });
+};
+
+function profit24hr() {
+  var avgBuyPrice = 0;
+  var avgSellPrice = 0;
+  var buyQty = 0;
+  var sellQty = 0;
+  var totalFees = 0;
+  getTime(function(nowTime){
+    authedClient.getFills(function(err, response, fills){
+      if (fills.length == 0) {
+        console.log('No fills');
+      }
+      for (var i = 0; i < fills.length; i++) {
+        if (moment(nowTime).diff(moment(fills[i]['created_at']), 'seconds') < (60*60*24)) {
+          if (fills[i]['side'] == 'sell') {
+            avgSellPrice = avgSellPrice + (fills[i]['price'] * fills[i]['size'])
+            sellQty = sellQty + parseFloat(fills[i]['size'])
+          } else {
+            avgBuyPrice = avgBuyPrice + (fills[i]['price'] * fills[i]['size'])
+            buyQty = buyQty + parseFloat(fills[i]['size'])
+          }
+          totalFees = totalFees + parseFloat(fills[i]['fee'])
+        }
+      }
+      avgBuyPrice = avgBuyPrice / buyQty
+      avgSellPrice = avgSellPrice / sellQty
+
+      var tradingProfit = (avgSellPrice * sellQty) - (avgBuyPrice * buyQty) - totalFees
+      myPrint('Last 24 hours trading profit: ' + tradingProfit)
+    });
   });
 };
 
@@ -120,7 +152,7 @@ function main() {
       getTime(function(nowTime){
         if (nowTime != null) {
           authedClient.getOrders(function(err, response, orders){
-            if (orders === null || orders.length == 0) {
+            if (orders == null || orders.length == 0) {
               // No orders on the book, cooldown ready, so lets make the algo do something
 
               authedClient.getAccounts(function(err, response, accounts){
@@ -139,19 +171,19 @@ function main() {
                     lastprice = parseFloat(fills[0]['price']);
                     nextOrderIsBuy = fills[0]['side'] == 'sell';
                     timeSinceLastFill = moment(nowTime).diff(moment(fills[0]['created_at']), 'seconds')
-                    if (timeSinceLastFill > (60*60*24)) {
-                      lastprice = askprice;
-                      nextOrderIsBuy = true;
+                    if (!nextOrderIsBuy && redoSell) {
+                      lastprice = askprice-spread;
+                      redoSell = false;
                     }
                     if (nextOrderIsBuy) {
-                      if ((askprice - bidprice) > 0.01) {
-                        tradePrice = bidprice + 0.01
+                      if ((askprice - bidprice) > 0.02) {
+                        tradePrice = Math.round(100*(bidprice + askprice)/2)/100
                       } else {
                         tradePrice = bidprice;
                       }
                     } else {
-                      if ((askprice - bidprice) > 0.01) {
-                        tradePrice = Math.max(askprice - 0.01, (lastprice+spread));
+                      if ((askprice - bidprice) > 0.02) {
+                        tradePrice = Math.max(Math.round(100*(bidprice + askprice)/2)/100, (lastprice+spread));
                       } else {
                         tradePrice = Math.max(askprice, (lastprice+spread));
                       }
@@ -163,8 +195,9 @@ function main() {
                   }
                   if (nextOrderIsBuy) {
                     // Send in a BUY order
-                    if (bidsize > qty && usdBalance > (tradePrice * qty * 1.0025) && timeSinceLastFill >= 60) {
+                    if (usdBalance > (tradePrice * qty * 1.0025) && timeSinceLastFill >= 10) {
                       myPrint('Total balance = ' + totalUSD);
+                      profit24hr();
                       myPrint("Buy " + qty + " at " + tradePrice);
                       s = buy(Math.round(100*tradePrice)/100, qty, function(s) {});
                     } else {
@@ -172,8 +205,9 @@ function main() {
                     }
                   } else {
                     // Send in a SELL order
-                    if (asksize > qty && btcBalance > qty && timeSinceLastFill > 10) {
+                    if (btcBalance > qty && timeSinceLastFill > 10) {
                       myPrint('Total balance = ' + totalUSD);
+                      profit24hr();
                       myPrint("Sell " + qty + " at " + tradePrice);
                       s = sell(Math.round(100*tradePrice)/100, qty, function(s) {});
                     }
@@ -184,9 +218,17 @@ function main() {
               // There's an order waiting, cancel it if it's been there too long and it's a buy
               if (orders[0] != undefined && orders[0]['side'] == 'buy') {
                 timeSinceLastFill = moment(nowTime).diff(moment(orders[0]['created_at']), 'seconds')
-                if (timeSinceLastFill > tooLong) {
+                if (timeSinceLastFill > tooLongBuy) {
                   myPrint('Buy order unfilled for ' + timeSinceLastFill + ' seconds, cancelling...');
                   cancelAll();
+                }
+              }
+              if (orders[0] != undefined && orders[0]['side'] == 'sell') {
+                timeSinceLastFill = moment(nowTime).diff(moment(orders[0]['created_at']), 'seconds')
+                if (timeSinceLastFill > tooLongSell && parseFloat(orders[0]['price']) > (askprice + 0.25)) {
+                  myPrint('Sell order unfilled for ' + timeSinceLastFill + ' seconds, cancelling...');
+                  cancelAll();
+                  redoSell = true;
                 }
               }
             };
