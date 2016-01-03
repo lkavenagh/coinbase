@@ -69,8 +69,7 @@ function profit24hr() {
       avgBuyPrice = avgBuyPrice / buyQty
       avgSellPrice = avgSellPrice / sellQty
 
-      var tradingProfit = (avgSellPrice * sellQty) - (avgBuyPrice * buyQty) - totalFees
-      myPrint('Last 24 hours trading profit: ' + tradingProfit)
+      myPrint('Last 24 hours average buy/sell differential: ' + (avgBuyPrice - avgSellPrice))
     });
   });
 };
@@ -94,7 +93,7 @@ function sell(askprice, qty, cb) {
   authedClient.sell(sellParams, function(err, response, data){
     console.log(data);
     var success = false;
-    if (data['message'] != 'price too precise') {
+    if (data != null && data['message'] != 'price too precise') {
       success = true;
     }
     cb(success);
@@ -110,7 +109,7 @@ function buy(bidprice, qty, cb) {
   authedClient.buy(buyParams, function(err, response, data){
     console.log(data);
     var success = false;
-    if (data['message'] != 'price too precise') {
+    if (data != null && data['message'] != 'price too precise') {
       success = true;
     }
     cb(success);
@@ -152,67 +151,69 @@ function main() {
       getTime(function(nowTime){
         if (nowTime != null) {
           authedClient.getOrders(function(err, response, orders){
-            if (orders == null || orders.length == 0) {
+            if (orders === null || orders.length == 0) {
               // No orders on the book, cooldown ready, so lets make the algo do something
 
               authedClient.getAccounts(function(err, response, accounts){
-                // Get balances
-                for (var i = 0; i < accounts.length; i++) {
-                  if (accounts[i]['currency'] == 'USD') {
-                    usdBalance = parseFloat(accounts[i]['balance']);
-                  } else if (accounts[i]['currency'] == 'BTC') {
-                    btcBalance = parseFloat(accounts[i]['balance']);
+                if (accounts != null) {
+                  // Get balances
+                  for (var i = 0; i < accounts.length; i++) {
+                    if (accounts[i]['currency'] == 'USD') {
+                      usdBalance = parseFloat(accounts[i]['balance']);
+                    } else if (accounts[i]['currency'] == 'BTC') {
+                      btcBalance = parseFloat(accounts[i]['balance']);
+                    };
                   };
-                };
-                var totalUSD = usdBalance + (btcBalance*bidprice);
+                  var totalUSD = usdBalance + (btcBalance*bidprice);
 
-                authedClient.getFills(function(err, response, fills) {
-                  if (fills.length > 0) {
-                    lastprice = parseFloat(fills[0]['price']);
-                    nextOrderIsBuy = fills[0]['side'] == 'sell';
-                    timeSinceLastFill = moment(nowTime).diff(moment(fills[0]['created_at']), 'seconds')
-                    if (!nextOrderIsBuy && redoSell) {
-                      lastprice = askprice-spread;
-                      redoSell = false;
+                  authedClient.getFills(function(err, response, fills) {
+                    if (fills.length > 0) {
+                      lastprice = parseFloat(fills[0]['price']);
+                      nextOrderIsBuy = fills[0]['side'] == 'sell';
+                      timeSinceLastFill = moment(nowTime).diff(moment(fills[0]['created_at']), 'seconds')
+                      if (!nextOrderIsBuy && redoSell) {
+                        lastprice = askprice-spread;
+                        redoSell = false;
+                      }
+                      if (nextOrderIsBuy) {
+                        if ((askprice - bidprice) > 0.02) {
+                          tradePrice = Math.round(100*(bidprice + askprice)/2)/100
+                        } else {
+                          tradePrice = bidprice;
+                        }
+                      } else {
+                        if ((askprice - bidprice) > 0.02) {
+                          tradePrice = Math.max(Math.round(100*(bidprice + askprice)/2)/100, (lastprice+spread));
+                        } else {
+                          tradePrice = Math.max(askprice, (lastprice+spread));
+                        }
+                      }
+                    } else {
+                      // No fills, do a buy first
+                      nextOrderIsBuy = true;
+                      tradePrice = bidprice;
                     }
                     if (nextOrderIsBuy) {
-                      if ((askprice - bidprice) > 0.02) {
-                        tradePrice = Math.round(100*(bidprice + askprice)/2)/100
+                      // Send in a BUY order
+                      if (usdBalance > (tradePrice * qty * 1.0025) && timeSinceLastFill >= 10) {
+                        myPrint('Total balance = ' + totalUSD);
+                        profit24hr();
+                        myPrint("Buy " + qty + " at " + tradePrice);
+                        s = buy(Math.round(100*tradePrice)/100, qty, function(s) {});
                       } else {
-                        tradePrice = bidprice;
+                        myPrint('timeSinceLastFill: ' + timeSinceLastFill + ' seconds');
                       }
                     } else {
-                      if ((askprice - bidprice) > 0.02) {
-                        tradePrice = Math.max(Math.round(100*(bidprice + askprice)/2)/100, (lastprice+spread));
-                      } else {
-                        tradePrice = Math.max(askprice, (lastprice+spread));
+                      // Send in a SELL order
+                      if (btcBalance > qty && timeSinceLastFill > 10) {
+                        myPrint('Total balance = ' + totalUSD);
+                        profit24hr();
+                        myPrint("Sell " + qty + " at " + tradePrice);
+                        s = sell(Math.round(100*tradePrice)/100, qty, function(s) {});
                       }
                     }
-                  } else {
-                    // No fills, do a buy first
-                    nextOrderIsBuy = true;
-                    tradePrice = bidprice;
-                  }
-                  if (nextOrderIsBuy) {
-                    // Send in a BUY order
-                    if (usdBalance > (tradePrice * qty * 1.0025) && timeSinceLastFill >= 10) {
-                      myPrint('Total balance = ' + totalUSD);
-                      profit24hr();
-                      myPrint("Buy " + qty + " at " + tradePrice);
-                      s = buy(Math.round(100*tradePrice)/100, qty, function(s) {});
-                    } else {
-                      myPrint('timeSinceLastFill: ' + timeSinceLastFill + ' seconds');
-                    }
-                  } else {
-                    // Send in a SELL order
-                    if (btcBalance > qty && timeSinceLastFill > 10) {
-                      myPrint('Total balance = ' + totalUSD);
-                      profit24hr();
-                      myPrint("Sell " + qty + " at " + tradePrice);
-                      s = sell(Math.round(100*tradePrice)/100, qty, function(s) {});
-                    }
-                  }
-                });
+                  });
+                }
               });
             } else {
               // There's an order waiting, cancel it if it's been there too long and it's a buy
@@ -225,7 +226,7 @@ function main() {
               }
               if (orders[0] != undefined && orders[0]['side'] == 'sell') {
                 timeSinceLastFill = moment(nowTime).diff(moment(orders[0]['created_at']), 'seconds')
-                if (timeSinceLastFill > tooLongSell && parseFloat(orders[0]['price']) > (askprice + 0.25)) {
+                if (timeSinceLastFill > tooLongSell && parseFloat(orders[0]['price']) > (askprice + 0.5)) {
                   myPrint('Sell order unfilled for ' + timeSinceLastFill + ' seconds, cancelling...');
                   cancelAll();
                   redoSell = true;
@@ -235,8 +236,8 @@ function main() {
           });
         }
       });
-      setTimeout(main, 5000);
     }
+    setTimeout(main, 5000);
   });
 }
 main();
