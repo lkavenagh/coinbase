@@ -38,4 +38,5 @@ Icon
 # my additions
 config.js
 config.py
+config.pyc
 node_modules/
