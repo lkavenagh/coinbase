@@ -19,7 +19,7 @@ requests.packages.urllib3.disable_warnings()
 LAST_N_TRADES = 50
 DOUBLE_DOWN_TOL = 2.0
 SELL_PERC_TRADES = 0.8
-BUY_PERC_TRADES = 0.5
+BUY_PERC_TRADES = 0.7
 TURNAROUND_TRADES = 10
 TRADE_ATTEMPTS = 20
 QTY = 0.01
@@ -80,11 +80,19 @@ def lastXHrsPerf(X, auth):
     if sellQty != 0:
         sellCost = sellCost / sellQty
 
-    print('Fees: ' + str(fees))
-    print('Avg. buy price: ' + str(round(buyCost,2)))
-    print('Avg. sell price: ' + str(round(sellCost,2)))
+    book = getOrderBook(auth)
+    mm_price = (float(book['asks'][0][0]) + float(book['bids'][0][0])) / 2
 
-    print('Total trading profit: ' + str(round((sellCost*sellQty) - (buyCost*buyQty) - fees, 2)))
+    usdBalance, btcBalance = printBalances(False, auth)
+
+    message = ('Fees: ' + str(fees) +
+        '\nAvg. buy price: ' + str(round(buyCost,2)) +
+        '\nAvg. sell price: ' + str(round(sellCost,2)) +
+        '\n\nTotal trading profit: ' + str(round((sellCost*sellQty) - (buyCost*buyQty) - fees, 2)) +
+        '\n\nCurrent account value: $' + str(mm_price * btcBalance + usdBalance)
+        )
+
+    return(message)
 
 def buy(qty, limit, auth):
     order = {
@@ -95,7 +103,6 @@ def buy(qty, limit, auth):
     }
     r = requests.post(api_url + 'orders', json=order, auth=auth)
     return(r.json())
-
 
 def sell(qty, limit, auth):
     order = {
@@ -126,7 +133,9 @@ def sellLimit(qty, limit, auth):
     if status['status'] == 'done':
         print(datetime.now())
         print('SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']) + "\n")
-        sendEmail('SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']), '')
+        m = lastXHrsPerf(24, auth)
+        print(m)
+        sendEmail('BTC_BOT SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
         return(True)
     else:
         print('SELL order not filled, cancelling')
@@ -151,7 +160,9 @@ def buyLimit(qty, limit, auth):
     if status['status'] == 'done':
         print(datetime.now())
         print('BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']) + "\n")
-        sendEmail('BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']), '')
+        m = lastXHrsPerf(24, auth)
+        print(m)
+        sendEmail('BTC_BOT BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
         return(True)
     else:
         print('BUY order not filled, cancelling')
@@ -207,12 +218,12 @@ def decideSide(trades, book, usdBalance, btcBalance, lastTrade, auth):
         requiredBTC = 0
 
     if (usdBalance < requiredUSD or btcBalance < requiredBTC):
-        print('Insufficient balance')
+        print('Insufficient balance for ' + nextTrade + '. Need USD/BTC ' + str(requiredUSD) + ' / ' + str(requiredBTC))
         nextTrade = 'None'
 
     if (nextTrade == lastTrade['side']):
         # Don't do 2 buys/sells in a row...unless the price is way different
-        if lastTrade['side'] == 'sell' and float(book['bids'][0][0]) < (lastTrade['price'] + DOUBLE_DOWN_TOL):
+        if lastTrade['side'] == 'sell' and float(book['asks'][0][0]) < (lastTrade['price'] + DOUBLE_DOWN_TOL):
             nextTrade = 'None'
         elif lastTrade['side'] == 'buy' and float(book['bids'][0][0]) > (lastTrade['price'] - DOUBLE_DOWN_TOL):
             nextTrade = 'None'
@@ -223,6 +234,19 @@ def getOrderBook(auth):
     r = requests.get(api_url + 'products/BTC-USD/book', auth=auth)
 
     return r.json()
+
+def printBalances(output, auth):
+    r = requests.get(api_url + 'accounts', auth=auth).json()
+    for account in r:
+        if account['currency'] == 'USD':
+            usdBalance = float(account['balance'])
+        elif account['currency'] == 'BTC':
+            btcBalance = float(account['balance'])
+
+    if (output):
+        print('USD/BTC balances: $' + str(round(usdBalance,2)) + ' / BTC ' + str(round(btcBalance,4)))
+
+    return(usdBalance, btcBalance)
 
 # Create custom authentication for Exchange
 class CoinbaseExchangeAuth(AuthBase):
@@ -249,18 +273,10 @@ class CoinbaseExchangeAuth(AuthBase):
 
 api_url = config.settings['apiURL']
 auth = CoinbaseExchangeAuth(config.settings['apiKey'], config.settings['secret'], config.settings['passphrase'])
+usdBalance, btcBalance = printBalances(True, auth)
 
 try:
     while True:
-        # Get accounts
-        r = requests.get(api_url + 'accounts', auth=auth).json()
-
-        for account in r:
-            if account['currency'] == 'USD':
-                usdBalance = float(account['balance'])
-            elif account['currency'] == 'BTC':
-                btcBalance = float(account['balance'])
-
         trades = getRecentTrades(100, auth)
         book = getOrderBook(auth)
         tradeSide = decideSide(trades, book, usdBalance, btcBalance, lastTrade, auth)
@@ -271,7 +287,7 @@ try:
             if success:
                 lastTrade = {'side': 'buy', 'size': QTY, 'price': float(book['asks'][0][0])}
                 lastXHrsPerf(24, auth)
-                print('USD/BTC balances: $' + str(round(usdBalance,2)) + ' / BTC ' + str(round(btcBalance,4)))
+                usdBalance, btcBalance = printBalances(True, auth)
             else:
                 print('Trade not filled, returning to top.')
         elif tradeSide == 'sell':
@@ -281,7 +297,7 @@ try:
             if success:
                 lastTrade = {'side': 'sell', 'size': QTY, 'price': float(book['bids'][0][0])}
                 lastXHrsPerf(24, auth)
-                print('USD/BTC balances: $' + str(round(usdBalance,2)) + ' / BTC ' + str(round(btcBalance,4)))
+                usdBalance, btcBalance = printBalances(True, auth)
             else:
                 print('Trade not filled, returning to top.')
 
