@@ -17,14 +17,16 @@ from requests.auth import AuthBase
 requests.packages.urllib3.disable_warnings()
 
 LAST_N_TRADES = 50
-DOUBLE_DOWN_TOL = 2.0
-SELL_PERC_TRADES = 0.8
-BUY_PERC_TRADES = 0.7
+DOUBLE_DOWN_TOL = 3.0
+SELL_PERC_TRADES = 0.7
+BUY_PERC_TRADES = 0.6
 TURNAROUND_TRADES = 10
 TRADE_ATTEMPTS = 20
 QTY = 0.01
 
-lastTrade = {'side': 'sell', 'size': 0, 'price': 0}
+START_TIME = datetime.utcnow()
+
+lastTrade = {'side': 'sell', 'size': 0.01, 'price': 447.14}
 
 from_zone = tz.gettz('UTC')
 to_zone = tz.gettz('America/Los_Angeles')
@@ -50,6 +52,10 @@ def sendEmail(subject, body):
 
 def getRecentTrades(N, auth):
     r = requests.get(api_url + 'products/BTC-USD/trades', auth=auth)
+    while not hasattr(r, 'json'):
+        time.sleep(1)
+        r = requests.get(api_url + 'products/BTC-USD/trades', auth=auth)
+
     maxTrades = min(N, len(r.json()))
     out = [{'side':r.json()[i]['side'],'price':r.json()[i]['price'],'time':r.json()[i]['time']} for i in range(0, maxTrades)]
 
@@ -63,9 +69,7 @@ def lastXHrsPerf(X, auth):
     buyQty = 0
     sellQty = 0
     for i in range(0,len(r)):
-        age = datetime.utcnow() - datetime.strptime(r[i]['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
-        ageHours = float(age.days*24 + age.seconds//3600)
-        if (ageHours < X):
+        if (datetime.strptime(r[i]['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ') >= START_TIME):
             fees += float(r[i]['fee'])
             if r[i]['side'] == 'buy':
                 buyCost += float(r[i]['price']) * float(r[i]['size'])
@@ -89,7 +93,7 @@ def lastXHrsPerf(X, auth):
         '\nAvg. buy price: ' + str(round(buyCost,2)) +
         '\nAvg. sell price: ' + str(round(sellCost,2)) +
         '\n\nTotal trading profit: ' + str(round((sellCost*sellQty) - (buyCost*buyQty) - fees, 2)) +
-        '\n\nCurrent account value: $' + str(mm_price * btcBalance + usdBalance)
+        '\n\nCurrent account value: $' + str(mm_price * btcBalance + usdBalance) + '\n'
         )
 
     return(message)
@@ -101,6 +105,7 @@ def buy(qty, limit, auth):
         'side': 'buy',
         'product_id': 'BTC-USD',
     }
+    print('Buying ' + str(qty) + ' @ $' + str(limit) + ' limit.')
     r = requests.post(api_url + 'orders', json=order, auth=auth)
     return(r.json())
 
@@ -111,15 +116,21 @@ def sell(qty, limit, auth):
         'side': 'sell',
         'product_id': 'BTC-USD',
     }
+    print('Selling ' + str(qty) + ' @ $' + str(limit) + ' limit.')
     r = requests.post(api_url + 'orders', json=order, auth=auth)
     return(r.json())
 
 def sellLimit(qty, limit, auth):
-    print('SELL ' + str(qty) + 'BTC @ $' + str(limit) + "\n")
+    print(datetime.now())
+    print('SELL ' + str(qty) + 'BTC @ $' + str(limit))
     attempts = 0
     r = sell(qty, limit, auth)
     time.sleep(5)
     status = requests.get(api_url + 'orders/' + r['id'], auth=auth).json()
+    while not status.has_key('status'):
+        print(status)
+        time.sleep(1)
+        status = requests.get(api_url + 'orders/' + r['id'], auth=auth).json()
 
     while status['status'] != 'done' and attempts < TRADE_ATTEMPTS-1:
         attempts += 1
@@ -136,18 +147,24 @@ def sellLimit(qty, limit, auth):
         m = lastXHrsPerf(24, auth)
         print(m)
         sendEmail('BTC_BOT SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
-        return(True)
+        return(True, status['price'])
     else:
         print('SELL order not filled, cancelling')
         cancelAll(auth)
-        return(False)
+        return(False, -1)
 
 def buyLimit(qty, limit, auth):
-    print('BUY ' + str(qty) + 'BTC @ $' + str(limit) + "\n")
+    print(datetime.now())
+    print('BUY ' + str(qty) + 'BTC @ $' + str(limit))
     attempts = 0
     r = buy(qty, limit, auth)
     time.sleep(5)
     status = requests.get(api_url + 'orders/' + r['id'], auth=auth).json()
+    while not status.has_key('status'):
+        print('Status not found...')
+        time.sleep(1)
+        status = requests.get(api_url + 'orders/' + r['id'], auth=auth).json()
+
     while status['status'] != 'done' and attempts < TRADE_ATTEMPTS-1:
         attempts += 1
         requests.delete(api_url + 'orders/' + r['id'], auth=auth)
@@ -163,11 +180,11 @@ def buyLimit(qty, limit, auth):
         m = lastXHrsPerf(24, auth)
         print(m)
         sendEmail('BTC_BOT BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
-        return(True)
+        return(True,status['price'])
     else:
         print('BUY order not filled, cancelling')
         cancelAll(auth)
-        return(False)
+        return(False, -1)
 
 def cancelAll(auth):
     r = requests.delete(api_url + 'orders', auth=auth)
@@ -187,10 +204,18 @@ def decideSide(trades, book, usdBalance, btcBalance, lastTrade, auth):
         else:
             tradeHist.append(-1)
 
-    if sum(tradeHist) > (LAST_N_TRADES*SELL_PERC_TRADES) and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) < TURNAROUND_TRADES:
+    if lastTrade['side'] == 'buy':
+        if trades[0]['price'] > lastTrade['price'] or trades[0]['price'] < lastTrade['price'] - DOUBLE_DOWN_TOL:
+            oppodiboppo = True
+        else:
+            oppodiboppo = False
+    else:
+        oppodiboppo = True
+
+    if sum(tradeHist) > (LAST_N_TRADES*SELL_PERC_TRADES) and oppodiboppo and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) < TURNAROUND_TRADES:
         # Price is rising fast
         nextTrade = 'sell'
-    elif sum(tradeHist) < (-1*LAST_N_TRADES*BUY_PERC_TRADES) and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) > -TURNAROUND_TRADES:
+    elif sum(tradeHist) < (-1*LAST_N_TRADES*BUY_PERC_TRADES) and oppodiboppo and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) > -TURNAROUND_TRADES:
         # Price is dropping fast
         nextTrade = 'buy'
     else:
@@ -232,6 +257,9 @@ def decideSide(trades, book, usdBalance, btcBalance, lastTrade, auth):
 
 def getOrderBook(auth):
     r = requests.get(api_url + 'products/BTC-USD/book', auth=auth)
+    while not hasattr(r, 'json'):
+        time.sleep(1)
+        r = requests.get(api_url + 'products/BTC-USD/book', auth=auth)
 
     return r.json()
 
@@ -283,9 +311,9 @@ try:
         if tradeSide == 'buy':
             time.sleep(5)
             book = getOrderBook(auth)
-            success = buyLimit(QTY, book['bids'][0][0], auth)
+            success, thistradeprice = buyLimit(QTY, float(book['bids'][0][0]), auth)
             if success:
-                lastTrade = {'side': 'buy', 'size': QTY, 'price': float(book['asks'][0][0])}
+                lastTrade = {'side': 'buy', 'size': QTY, 'price': float(thistradeprice)}
                 lastXHrsPerf(24, auth)
                 usdBalance, btcBalance = printBalances(True, auth)
             else:
@@ -293,9 +321,9 @@ try:
         elif tradeSide == 'sell':
             time.sleep(5)
             book = getOrderBook(auth)
-            success = sellLimit(QTY, book['asks'][0][0], auth)
+            success, thistradeprice = sellLimit(QTY, float(book['asks'][0][0]), auth)
             if success:
-                lastTrade = {'side': 'sell', 'size': QTY, 'price': float(book['bids'][0][0])}
+                lastTrade = {'side': 'sell', 'size': QTY, 'price': float(thistradeprice)}
                 lastXHrsPerf(24, auth)
                 usdBalance, btcBalance = printBalances(True, auth)
             else:
@@ -304,5 +332,5 @@ try:
         time.sleep(2)
 except:
     cancelAll(auth)
-    sendEmail('Error occurred :(', '')
+    sendEmail('Error occurred :(', sys.exc_info()[0])
     raise
