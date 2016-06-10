@@ -1,9 +1,9 @@
 var CoinbaseExchange = require('coinbase-exchange');
 var publicClient = new CoinbaseExchange.PublicClient();
 var authedClient = new CoinbaseExchange.AuthenticatedClient(
-  'ea3867448cb29220af13b39e26a2f5b7',
-  'c9cVzSi3x1gDbVTWmYB/WiTvP/Q2xfIHoU6+1RWjVZx4R+8tDcMJqabrjinM5FpB3fv5dd+xTAiGeTb3OUKJZw==',
-  'qj8l5rolkr9t3xr'
+  '8f575a96c1bcd93e933bfef84c6b130e',
+  'bn8v17GTfyQWx22VRxQM/QqlyCtiE7Ybd+NBJZUVsc/qSwnNFnDNKBxHK9j/WNnpo7rPCW2DcFYtjy0CbXvrHg==',
+  'lm9l7jzawobyylfudbq589f6r'
 );
 // var client = new Client({'apiKey': 'Tl2NnJCujIMvqRet',
 //                          'apiSecret': 'DrJ4V0s0aJWmJbvcqvpWC2HVdFEhJpwA'})

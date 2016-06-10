@@ -1,5 +1,6 @@
 var config = require('./config');
 var moment = require('moment');
+var util = require('util');
 
 var CoinbaseExchange = require('coinbase-exchange');
 var publicClient = new CoinbaseExchange.PublicClient();
@@ -10,16 +11,17 @@ var authedClient = new CoinbaseExchange.AuthenticatedClient(
   // 'https://api-public.sandbox.exchange.coinbase.com'
 );
 
-var tooLongBuy = 10 //don't leave a buy order unfilled for more than 10 seconds
+var tooLongBuy = 30 //don't leave a buy order unfilled for more than 10 seconds
 var tooLongSell = 60 * 5
 var redoSell = true;
-var qty = 0.02;
-var spread = 0.1;
+var qty = 0.01;
+var spread = 0.2;
 var lastprice = -1;
 var nextOrderIsBuy = true;
 var usdBalance = 0;
 var btcBalance = 0;
 var timeSinceLastFill = 60;
+var LOOP_TIME = 5000;
 
 function cancelAll() {
   authedClient.getOrders(function(err, response, data){
@@ -68,8 +70,12 @@ function profit24hr() {
       }
       avgBuyPrice = avgBuyPrice / buyQty
       avgSellPrice = avgSellPrice / sellQty
+      profit = (avgBuyPrice - avgSellPrice)
+      if (isNaN(profit)) {
+        profit = 0
+      }
 
-      myPrint('Last 24 hours average buy/sell differential: ' + (avgBuyPrice - avgSellPrice))
+      myPrint('Last 24 hours average buy/sell differential: ' + profit)
     });
   });
 };
@@ -176,11 +182,7 @@ function main() {
                         redoSell = false;
                       }
                       if (nextOrderIsBuy) {
-                        if ((askprice - bidprice) > 0.02) {
-                          tradePrice = Math.round(100*(bidprice + askprice)/2)/100
-                        } else {
-                          tradePrice = bidprice;
-                        }
+                        tradePrice = askprice - 0.01
                       } else {
                         if ((askprice - bidprice) > 0.02) {
                           tradePrice = Math.max(Math.round(100*(bidprice + askprice)/2)/100, (lastprice+spread));
@@ -237,7 +239,7 @@ function main() {
         }
       });
     }
-    setTimeout(main, 5000);
+    setTimeout(main, LOOP_TIME);
   });
 }
 main();
