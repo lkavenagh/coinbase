@@ -9,6 +9,8 @@
 #
 #   easy_install requests
 
+import os
+os.chdir(r'c:\users\barby\documents\github\coinbase')
 import json, hmac, hashlib, time, requests, base64, config, sys, smtplib
 from datetime import datetime
 from dateutil import tz
@@ -264,7 +266,7 @@ def getOrderBook(auth):
     return r.json()
 
 def printBalances(output, auth):
-    r = requests.get(api_url + 'accounts', auth=auth).json()
+    r = requests.get((api_url + 'accounts').encode('utf-8'), auth=auth).json()
     for account in r:
         if account['currency'] == 'USD':
             usdBalance = float(account['balance'])
@@ -299,8 +301,8 @@ class CoinbaseExchangeAuth(AuthBase):
         })
         return request
 
-api_url = config.settings['apiURL']
-auth = CoinbaseExchangeAuth(config.settings['apiKey'], config.settings['secret'], config.settings['passphrase'])
+api_url = config.api['apiUrl']
+auth = CoinbaseExchangeAuth(config.api['apiKey'], config.api['secret'], config.api['passphrase'])
 usdBalance, btcBalance = printBalances(True, auth)
 
 try:
