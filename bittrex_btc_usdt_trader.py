@@ -16,7 +16,9 @@ out = pd.DataFrame(columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPri
 btc_max = 0.001
 usd_max = 0.5
 
-max_order_time = 60
+fee_pct = 0.0025
+
+max_order_time = 120
 rolling_stats = 100
 num_open_orders = 5
 
@@ -74,32 +76,32 @@ def cancelOrder(uuid):
 
 def getOrderStatus(uuid):
     return(bx_client.get_order(uuid))
-    
-def getPrice(market, t = 'Last'):
-    p = bx_client.get_ticker(market)
-    if p['success']:
-        return(p['result'][t])
-    else:
-        return(None)
         
-def getAskPrice(market):
-    p = bx_client.get_ticker(market)
+def getPrices(market):
+    try:
+        p = bx_client.get_ticker(market)
+    except:
+        time.sleep(5)    
+        p = bx_client.get_ticker(market)
     if p['success']:
-        return(p['result']['Ask'])
+        return(p['result'])
     else:
         return(None)
 
-def getBalance(curr):
+def getBalances():
     b = bx_client.get_balances()
+    s = dict()
     if b['success']:
         for i in b['result']:
-            if i['Currency'] == curr:
-                return i['Balance']
+            s[i['Currency']] = i['Balance']
+    return s
             
 def getTotalWorth():
-    btc = getBalance('BTC')
-    usd = getBalance('USDT')
-    xr = getPrice(market, 'Last')
+    b = getBalances()
+    btc = b['BTC']
+    usd = b['USDT']
+    p = getPrices(market)
+    xr = p['Bid'] + ((p['Ask'] - p['Bid'])/2)
     return(usd + (btc*xr))
 
 def removeStaleOrders(orders):
@@ -107,7 +109,8 @@ def removeStaleOrders(orders):
         o = getOrderStatus(s['uuid'])
         td = datetime.datetime.now(datetime.timezone.utc) - pytz.utc.localize(datetime.datetime.strptime(o['result']['Opened'][:19], '%Y-%m-%dT%H:%M:%S'))
         if td.seconds > max_order_time:
-            cancelOrder(o['result']['OrderUuid'])
+            if o['result']['OrderUuid'] != None:
+                cancelOrder(o['result']['OrderUuid'])
 
 def removeCompletedOrders(orders, out):
     for s in orders:
@@ -121,7 +124,7 @@ def removeCompletedOrders(orders, out):
                         o['result']['Quantity'],
                         o['result']['PricePerUnit'],
                         getTotalWorth(),
-                        getPrice(market, 'Last'),
+                        getPrices(market)['Last'],
                         np.mean(out.lastPrice.tail(rolling_stats)),
                         np.std(out.lastPrice.tail(rolling_stats))
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
@@ -133,7 +136,7 @@ def removeCompletedOrders(orders, out):
                         o['result']['Quantity'],
                         o['result']['PricePerUnit'],
                         getTotalWorth(),
-                        getPrice(market, 'Last'),
+                        getPrices(market)['Last'],
                         np.mean(out.lastPrice.tail(rolling_stats)),
                         np.std(out.lastPrice.tail(rolling_stats))
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
@@ -143,32 +146,33 @@ def removeCompletedOrders(orders, out):
     return(out)
 
 def plotResults(out):
+    toplot = out.reset_index(drop = True)
     fig = plt.figure()
     ax = fig.add_subplot(211)
     
-    ax.plot(out.time, out.lastPrice)
+    ax.plot(toplot.time, toplot.lastPrice)
     
-    for i in np.arange(0,len(out)):
-        if out.type[i] != None:
-            if out.type[i] == 'sell':
-                ax.plot(out.time[i], out.prc[i], color = 'red', marker = 'o')
-            if out.type[i] == 'buy':
-                ax.plot(out.time[i], out.prc[i], color = 'green', marker = 'o')
-            if out.type[i] == 'sellattempt':
-                ax.plot(out.time[i], out.prc[i], color = 'red', marker = 'o', markerfacecolor = 'none')
-            if out.type[i] == 'buyattempt':
-                ax.plot(out.time[i], out.prc[i], color = 'green', marker = 'o', markerfacecolor = 'none')
+    for i in np.arange(0,len(toplot)):
+        if toplot.type[i] != None:
+            if toplot.type[i] == 'sell':
+                ax.plot(toplot.time[i], toplot.prc[i], color = 'red', marker = 'o')
+            if toplot.type[i] == 'buy':
+                ax.plot(toplot.time[i], toplot.prc[i], color = 'green', marker = 'o')
+            if toplot.type[i] == 'sellattempt':
+                ax.plot(toplot.time[i], toplot.prc[i], color = 'red', marker = 'o', markerfacecolor = 'none')
+            if toplot.type[i] == 'buyattempt':
+                ax.plot(toplot.time[i], toplot.prc[i], color = 'green', marker = 'o', markerfacecolor = 'none')
     
-    ax.plot(out.time, out.mu, color = 'black', ls = '--', lw = 1)
-    ax.plot(out.time, out.mu + out.sd, color = 'red', ls = '--', lw = 1)
-    ax.plot(out.time, out.mu - out.sd, color = 'red', ls = '--', lw = 1)
+    ax.plot(toplot.time, toplot.mu, color = 'black', ls = '--', lw = 1)
+    ax.plot(toplot.time, toplot.mu + toplot.sd, color = 'red', ls = '--', lw = 1)
+    ax.plot(toplot.time, toplot.mu - toplot.sd, color = 'red', ls = '--', lw = 1)
     
     ax.xaxis.set_ticks([])
     
     ax.set_title('Bitcoin price, with buys (green) and sells (red)')
     
     ax = fig.add_subplot(212)
-    ax.plot(out.time, out.netWorth)
+    ax.plot(toplot.time, toplot.netWorth)
     for l in ax.xaxis.get_majorticklabels():
         l.set_rotation(45)
     
@@ -200,12 +204,24 @@ out = out.append(pd.DataFrame([[
                 np.nan,
                 np.nan,
                 getTotalWorth(),
-                getPrice(market, 'Last'),
+                getPrices(market)['Last'],
                 np.mean(out.lastPrice.tail(rolling_stats)),
                 np.std(out.lastPrice.tail(rolling_stats))
                 ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
 while 1:
     newtime = bx_client.get_marketsummary('USDT-BTC')['result'][0]['TimeStamp']
+    b = getBalances()
+    usdbal = b['USDT']
+    btcbal = b['BTC']
+    prices = getPrices(market)
+    askprice = prices['Ask']
+    bidprice = prices['Bid']
+    lastprice = prices['Last']
+    worth = getTotalWorth()
+    
+    feediff = fee_pct * lastprice
+    buyprice = bidprice - feediff
+    sellprice = askprice + feediff
 
     if (newtime > str(out.time.tail(1).iloc[0])):
         out = out.append(pd.DataFrame([[
@@ -213,16 +229,16 @@ while 1:
                 np.nan,
                 np.nan,
                 np.nan,
-                getTotalWorth(),
-                getPrice(market, 'Last'),
+                worth,
+                lastprice,
                 np.mean(out.lastPrice.tail(rolling_stats)),
                 np.std(out.lastPrice.tail(rolling_stats))
                 ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
     
-    if (nextTrade == 'buy') & (getBalance('USDT') < (getPrice(market, 'Ask') * btc_max)):
+    if (nextTrade == 'buy') & (usdbal < (askprice * btc_max)):
         nextTrade = 'sell'
         myPrint('Not enough USD to buy, switching to sell')
-    if (nextTrade == 'sell') & (getBalance('BTC') < btc_max):
+    if (nextTrade == 'sell') & (btcbal < btc_max):
         nextTrade = 'buy'
         myPrint('Not enough BTC to sell, switching to buy')
     
@@ -230,31 +246,31 @@ while 1:
         mu = np.mean(out.lastPrice.tail(rolling_stats))
         sd = np.std(out.lastPrice.tail(rolling_stats))
         if (out.lastPrice.tail(1).iloc[0] < (mu - (1*sd))) & (out.lastPrice.tail(1).iloc[0] < out.lastPrice.tail(2).iloc[0]):
-            if (len(buy_orders + sell_orders) < num_open_orders) & (getBalance('USDT') > (getPrice(market, 'Ask') * btc_max)):
-                buyBTC(btc_max, getPrice(market, 'Bid'))
+            if (len(buy_orders + sell_orders) < num_open_orders) & (usdbal > (buyprice * btc_max)):
+                buyBTC(btc_max, buyprice)
                 out = out.append(pd.DataFrame([[
                         datetime.datetime.strptime(newtime[:19], '%Y-%m-%dT%H:%M:%S'),
                         'buyattempt',
                         btc_max,
-                        getPrice(market, 'Bid') + (getPrice(market, 'Ask')-getPrice(market, 'Bid'))/2,
-                        getTotalWorth(),
-                        getPrice(market, 'Last'),
-                        np.mean(out.lastPrice.tail(rolling_stats)),
-                        np.std(out.lastPrice.tail(rolling_stats))
+                        buyprice,
+                        worth,
+                        lastprice,
+                        mu,
+                        sd
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
                 nextTrade = 'sell'
         elif (out.lastPrice.tail(1).iloc[0] > (mu + (1*sd))) & (out.lastPrice.tail(1).iloc[0] > out.lastPrice.tail(2).iloc[0]):
-            if (len(buy_orders + sell_orders) < num_open_orders) & (getBalance('BTC') > btc_max) & (len(sell_orders) == 0):
-                sellBTC(btc_max, getPrice(market, 'Ask'))
+            if (len(buy_orders + sell_orders) < num_open_orders) & (btcbal > btc_max) & (len(sell_orders) == 0):
+                sellBTC(btc_max, sellprice)
                 out = out.append(pd.DataFrame([[
                         datetime.datetime.strptime(newtime[:19], '%Y-%m-%dT%H:%M:%S'),
                         'sellattempt',
                         btc_max,
-                        getPrice(market, 'Bid') + (getPrice(market, 'Ask')-getPrice(market, 'Bid'))/2,
-                        getTotalWorth(),
-                        getPrice(market, 'Last'),
-                        np.mean(out.lastPrice.tail(rolling_stats)),
-                        np.std(out.lastPrice.tail(rolling_stats))
+                        sellprice,
+                        worth,
+                        lastprice,
+                        mu,
+                        sd
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
                 nextTrade == 'buy'
     
@@ -264,7 +280,7 @@ while 1:
     out = out.reset_index(drop = True)
     out.time = [datetime.datetime.strptime(d[:19], '%Y-%m-%dT%H:%M:%S') if type(d) == str else d for d in out.time]
     
-    plotResults(out)
+    plotResults(out.tail(1000))
     
-    time.sleep(1)
+    time.sleep(10)
     
