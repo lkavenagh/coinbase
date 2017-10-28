@@ -62,20 +62,25 @@ def cancelAllBuyOrders():
             
 def cancelOrder(uuid):
     o = getOrderStatus(uuid)
-    myPrint('Cancelling ' + o['result']['Type'] + ' order (' + o['result']['OrderUuid'] + ')')
-    c = bx_client.cancel(uuid)
-    if c['success'] | (c['message'] == 'ORDER_NOT_OPEN'):
-        if o['result']['Type'] == 'LIMIT_SELL':
-            if len(np.where([True if b['uuid'] == uuid else False for b in sell_orders])[0]) > 0:
-                sell_orders.remove(sell_orders[np.where([True if b['uuid'] == uuid else False for b in sell_orders])[0][0]])
-        elif o['result']['Type'] == 'LIMIT_BUY':
-            if len(np.where([True if b['uuid'] == uuid else False for b in buy_orders])[0]) > 0:
-                buy_orders.remove(buy_orders[np.where([True if b['uuid'] == uuid else False for b in buy_orders])[0][0]])
-    else:
-        myPrint(c['message'])
+    if o != None:
+        myPrint('Cancelling ' + o['result']['Type'] + ' order (' + o['result']['OrderUuid'] + ')')
+        c = bx_client.cancel(uuid)
+        if c['success'] | (c['message'] == 'ORDER_NOT_OPEN'):
+            if o['result']['Type'] == 'LIMIT_SELL':
+                if len(np.where([True if b['uuid'] == uuid else False for b in sell_orders])[0]) > 0:
+                    sell_orders.remove(sell_orders[np.where([True if b['uuid'] == uuid else False for b in sell_orders])[0][0]])
+            elif o['result']['Type'] == 'LIMIT_BUY':
+                if len(np.where([True if b['uuid'] == uuid else False for b in buy_orders])[0]) > 0:
+                    buy_orders.remove(buy_orders[np.where([True if b['uuid'] == uuid else False for b in buy_orders])[0][0]])
+        else:
+            myPrint(c['message'])
 
 def getOrderStatus(uuid):
-    return(bx_client.get_order(uuid))
+    o = bx_client.get_order(uuid)
+    if o['success'] == True:
+        return(o)
+    else:
+        return(None)
         
 def getPrices(market):
     try:
@@ -107,41 +112,45 @@ def getTotalWorth():
 def removeStaleOrders(orders):
     for s in orders:
         o = getOrderStatus(s['uuid'])
-        td = datetime.datetime.now(datetime.timezone.utc) - pytz.utc.localize(datetime.datetime.strptime(o['result']['Opened'][:19], '%Y-%m-%dT%H:%M:%S'))
-        if td.seconds > max_order_time:
-            if o['result']['OrderUuid'] != None:
-                cancelOrder(o['result']['OrderUuid'])
+        if o != None:
+            n = datetime.datetime.now(datetime.timezone.utc)
+            ot = pytz.utc.localize(datetime.datetime.strptime(o['result']['Opened'][:19], '%Y-%m-%dT%H:%M:%S'))
+            td = n - ot
+            if (n > ot) & (td.seconds > max_order_time):
+                if o['result']['OrderUuid'] != None:
+                    cancelOrder(o['result']['OrderUuid'])
 
 def removeCompletedOrders(orders, out):
     for s in orders:
         o = getOrderStatus(s['uuid'])
-        if o['result']['Closed'] != None:
-            if o['result']['Type'] == 'LIMIT_SELL':
-                sell_orders.remove(sell_orders[np.where([True if b['uuid'] == s['uuid'] else False for b in sell_orders])[0][0]])
-                out = out.append(pd.DataFrame([[
-                        datetime.datetime.strptime(o['result']['Closed'][:19], '%Y-%m-%dT%H:%M:%S'),
-                        'sell',
-                        o['result']['Quantity'],
-                        o['result']['PricePerUnit'],
-                        getTotalWorth(),
-                        getPrices(market)['Last'],
-                        np.mean(out.lastPrice.tail(rolling_stats)),
-                        np.std(out.lastPrice.tail(rolling_stats))
-                        ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
-            elif o['result']['Type'] == 'LIMIT_BUY':
-                buy_orders.remove(buy_orders[np.where([True if b['uuid'] == s['uuid'] else False for b in buy_orders])[0][0]])
-                out = out.append(pd.DataFrame([[
-                        datetime.datetime.strptime(o['result']['Closed'][:19], '%Y-%m-%dT%H:%M:%S'),
-                        'buy',
-                        o['result']['Quantity'],
-                        o['result']['PricePerUnit'],
-                        getTotalWorth(),
-                        getPrices(market)['Last'],
-                        np.mean(out.lastPrice.tail(rolling_stats)),
-                        np.std(out.lastPrice.tail(rolling_stats))
-                        ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
-    
-            print(getTotalWorth())
+        if o != None:
+            if o['result']['Closed'] != None:
+                if o['result']['Type'] == 'LIMIT_SELL':
+                    sell_orders.remove(sell_orders[np.where([True if b['uuid'] == s['uuid'] else False for b in sell_orders])[0][0]])
+                    out = out.append(pd.DataFrame([[
+                            datetime.datetime.strptime(o['result']['Closed'][:19], '%Y-%m-%dT%H:%M:%S'),
+                            'sell',
+                            o['result']['Quantity'],
+                            o['result']['PricePerUnit'],
+                            getTotalWorth(),
+                            getPrices(market)['Last'],
+                            np.mean(out.lastPrice.tail(rolling_stats)),
+                            np.std(out.lastPrice.tail(rolling_stats))
+                            ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
+                elif o['result']['Type'] == 'LIMIT_BUY':
+                    buy_orders.remove(buy_orders[np.where([True if b['uuid'] == s['uuid'] else False for b in buy_orders])[0][0]])
+                    out = out.append(pd.DataFrame([[
+                            datetime.datetime.strptime(o['result']['Closed'][:19], '%Y-%m-%dT%H:%M:%S'),
+                            'buy',
+                            o['result']['Quantity'],
+                            o['result']['PricePerUnit'],
+                            getTotalWorth(),
+                            getPrices(market)['Last'],
+                            np.mean(out.lastPrice.tail(rolling_stats)),
+                            np.std(out.lastPrice.tail(rolling_stats))
+                            ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
+        
+                print(getTotalWorth())
 
     return(out)
 
@@ -178,6 +187,8 @@ def plotResults(out):
     
     ax.set_title('Net worth (BTC + USD), in USD')
     
+    ax.ticklabel_format(style='plain', useOffset=False, axis='y')
+    
     fig.tight_layout()
     
     try:
@@ -191,10 +202,13 @@ def plotResults(out):
 #%% Add mu and sd to the 'out' dataframe, so you can plot it point-in-time.
 cancelAllOrders()
 
+myPrint(str(getPrices(market)['Last']))
+myPrint(str(getTotalWorth()))
+
 priceHistory = []
 netWorthHistory = []
 
-nextTrade = 'buy'
+#nextTrade = 'buy'
 plt.ion()
 plt.show()
 
@@ -235,12 +249,12 @@ while 1:
                 np.std(out.lastPrice.tail(rolling_stats))
                 ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
     
-    if (nextTrade == 'buy') & (usdbal < (askprice * btc_max)):
-        nextTrade = 'sell'
-        myPrint('Not enough USD to buy, switching to sell')
-    if (nextTrade == 'sell') & (btcbal < btc_max):
-        nextTrade = 'buy'
-        myPrint('Not enough BTC to sell, switching to buy')
+#    if (nextTrade == 'buy') & (usdbal < (askprice * btc_max)):
+#        nextTrade = 'sell'
+#        myPrint('Not enough USD to buy, switching to sell')
+#    if (nextTrade == 'sell') & (btcbal < btc_max):
+#        nextTrade = 'buy'
+#        myPrint('Not enough BTC to sell, switching to buy')
     
     if len(out) > 10:
         mu = np.mean(out.lastPrice.tail(rolling_stats))
@@ -258,7 +272,7 @@ while 1:
                         mu,
                         sd
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
-                nextTrade = 'sell'
+#                nextTrade = 'sell'
         elif (out.lastPrice.tail(1).iloc[0] > (mu + (1*sd))) & (out.lastPrice.tail(1).iloc[0] > out.lastPrice.tail(2).iloc[0]):
             if (len(buy_orders + sell_orders) < num_open_orders) & (btcbal > btc_max) & (len(sell_orders) == 0):
                 sellBTC(btc_max, sellprice)
@@ -272,7 +286,7 @@ while 1:
                         mu,
                         sd
                         ]], columns = ['time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
-                nextTrade == 'buy'
+#                nextTrade == 'buy'
     
     removeStaleOrders(sell_orders + buy_orders)
     out = removeCompletedOrders(sell_orders + buy_orders, out)
@@ -282,5 +296,5 @@ while 1:
     
     plotResults(out.tail(1000))
     
-    time.sleep(10)
+    time.sleep(5)
     
