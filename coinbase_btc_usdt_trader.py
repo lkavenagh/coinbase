@@ -4,6 +4,7 @@ import config
 import gdax
 import time
 import pytz
+from dateutil import tz
 import numpy as np
 import pandas as pd
 import datetime
@@ -13,11 +14,17 @@ sell_orders = []
 buy_orders = []
 out = pd.DataFrame(columns = ['currency', 'time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd'])
 
-currencies = ['BTC', 'LTC', 'ETH']
+returns = [None, None, None]
+currencies = ['BTC', 'BCH', 'LTC', 'ETH']
 
-cur_max = 0.25
+cur_max = 0.01
 
 fee_pct = 0.000005
+
+global from_zone
+global to_zone
+from_zone = tz.tzutc()
+to_zone = tz.tzlocal()
 
 max_order_time = 120
 rolling_stats = 100
@@ -30,7 +37,7 @@ def myPrint(s):
     
 def sell(qty, cur, limit=9999):
     limit = round(limit,2)
-    s = gdax_client.sell(price=limit, size=qty, product_id = cur + '-USD')
+    s = gdax_client.sell(price=limit, size=qty, post_only = True, product_id = cur + '-USD')
     if 'status' in s:
         myPrint('Selling ' + str(qty) + ' ' + cur + ' (' + s['id'] + ')')
         sell_orders.append(s)
@@ -39,7 +46,7 @@ def sell(qty, cur, limit=9999):
         
 def buy(qty, cur, limit=1):
     limit = round(limit,2)
-    b = gdax_client.buy(price=limit, size=qty, product_id = cur + '-USD')
+    b = gdax_client.buy(price=limit, size=qty, post_only = True, product_id = cur + '-USD')
     if 'status' in b:
         myPrint('Buying ' + str(qty) + ' ' + cur + ' (' + b['id'] + ')')
         buy_orders.append(b)
@@ -101,18 +108,19 @@ def getAccountIds():
 
 def getTotalWorth():
     b = getBalances()
-    btc = b['BTC']
     usd = b['USD']
-    ltc = b['LTC']
-    eth = b['ETH']
-    p = getPrices('BTC')
-    xr_btc = p['bid'] + ((p['ask'] - p['bid'])/2)
-    p = getPrices('LTC')
-    xr_ltc = p['bid'] + ((p['ask'] - p['bid'])/2)
-    p = getPrices('ETH')
-    xr_eth = p['bid'] + ((p['ask'] - p['bid'])/2)
     
-    return(usd + (btc*xr_btc) + (ltc*xr_ltc) + (eth*xr_eth))
+    worths = []
+    
+    for c in currencies:
+        p = getPrices(c)
+        if 'ask' in p.keys():
+            worths.append((p['bid'] + ((p['ask'] - p['bid'])/2)) * getBalances()[c])
+        else:
+            p = getPrices(c)
+            worths.append((p['bid'] + ((p['ask'] - p['bid'])/2)) * getBalances()[c])
+    
+    return(usd + sum(worths))
 
 def removeStaleOrders(orders):
     for s in orders:
@@ -135,7 +143,7 @@ def removeCompletedOrders(orders, out):
                         sell_orders.remove(sell_orders[np.where([True if b['id'] == s['id'] else False for b in sell_orders])[0][0]])
                         out = out.append(pd.DataFrame([[
                                 o['product_id'][:3],
-                                datetime.datetime.strptime(o['done_at'][:19], '%Y-%m-%dT%H:%M:%S'),
+                                datetime.datetime.strptime(o['done_at'][:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=from_zone).astimezone(to_zone).replace(tzinfo=None),
                                 'sell',
                                 o['size'],
                                 (float(o['executed_value']) - float(o['fill_fees'])) / float(o['filled_size']),
@@ -148,7 +156,7 @@ def removeCompletedOrders(orders, out):
                         buy_orders.remove(buy_orders[np.where([True if b['id'] == s['id'] else False for b in buy_orders])[0][0]])
                         out = out.append(pd.DataFrame([[
                                 o['product_id'][:3],
-                                datetime.datetime.strptime(o['done_at'][:19], '%Y-%m-%dT%H:%M:%S'),
+                                datetime.datetime.strptime(o['done_at'][:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=from_zone).astimezone(to_zone).replace(tzinfo=None),
                                 'buy',
                                 o['size'],
                                 (float(o['executed_value']) + float(o['fill_fees'])) / float(o['filled_size']),
@@ -160,12 +168,13 @@ def removeCompletedOrders(orders, out):
 
     return(out)
     
-def plotResults(out):
+def plotResults(out, b, returns):
     fig = plt.figure(figsize = (8,11))
+    numplots = len(set(out.currency))+1
     for n,c in enumerate(list(set(out.currency))):
         toplot = out.loc[out.currency == c]
         toplot = toplot.reset_index(drop = True)
-        ax = fig.add_subplot(4,1,n+1)
+        ax = fig.add_subplot(numplots,1,n+1)
         
         ax.plot(toplot.time, toplot.lastPrice)
         
@@ -186,19 +195,20 @@ def plotResults(out):
         
         ax.xaxis.set_ticks([])
         
-        ax.set_title(c + ' price')
+        ax.set_title(c + ' price' + '        ' + 'Balance: ' + str(round(b[c],3)))
         
-    ax = fig.add_subplot(414)
+    ax = fig.add_subplot(numplots,1,numplots)
     toplot = out.reset_index(drop = True)
     toplot = toplot.loc[toplot.currency == 'BTC']
     ax.plot(toplot.time, toplot.netWorth)
     for l in ax.xaxis.get_majorticklabels():
         l.set_rotation(45)
     
-    ax.set_title('Net worth in USD')
+    ax.set_title('Net worth in USD' + '        ' + 'USD Balance: ' + str(round(b['USD'],3)))
     
     ax.ticklabel_format(style='plain', useOffset=False, axis='y')
     
+    fig.text(0,0,'BTC return: ' + str(round(returns[0],2)) + '    My return: ' + str(round(returns[1],2)) + '    Excess return: ' + str(round(returns[2],2)), ha = 'left')
     fig.tight_layout()
     
     try:
@@ -209,19 +219,30 @@ def plotResults(out):
     plt.close(fig)
 
             
-#%% Add mu and sd to the 'out' dataframe, so you can plot it point-in-time.
+#%%
 cancelAllOrders()
 
 priceHistory = []
 netWorthHistory = []
 
+minsizes = dict()
+minsizes['BTC'] = 0.001
+minsizes['BCH'] = 0.01
+minsizes['LTC'] = 0.1
+minsizes['ETH'] = 0.01
+
 #nextTrade = 'buy'
 plt.ion()
 plt.show()
 
+starting_btc = getPrices('BTC')['price']
+starting_pot = getTotalWorth()
+
+newtime = datetime.datetime.strptime(gdax_client.get_time()['iso'][:19], '%Y-%m-%dT%H:%M:%S')
+
 out = out.append(pd.DataFrame([[
                 'BTC',
-                gdax_client.get_time()['iso'],
+                newtime,
                 np.nan,
                 np.nan,
                 np.nan,
@@ -230,8 +251,11 @@ out = out.append(pd.DataFrame([[
                 np.nan,
                 np.nan
                 ]], columns = ['currency', 'time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
+
+out.time = [d.replace(tzinfo=from_zone).astimezone(to_zone).replace(tzinfo=None) for d in out.time]
+
 while 1:
-    newtime = gdax_client.get_time()['iso']
+    newtime = datetime.datetime.strptime(gdax_client.get_time()['iso'][:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=from_zone).astimezone(to_zone).replace(tzinfo=None)
     b = getBalances()
     usdbal = b['USD']
     bal = dict()
@@ -258,7 +282,7 @@ while 1:
         
         out = out.append(pd.DataFrame([[
                         c,
-                        datetime.datetime.strptime(newtime[:19], '%Y-%m-%dT%H:%M:%S'),
+                        newtime,
                         np.nan,
                         np.nan,
                         np.nan,
@@ -269,11 +293,11 @@ while 1:
                         ]], columns = ['currency', 'time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
     
         if (out.loc[out.currency == c].lastPrice.tail(1).iloc[0] < (mu - (1*sd))) & (out.loc[out.currency == c].lastPrice.tail(1).iloc[0] < out.loc[out.currency == c].lastPrice.tail(2).iloc[0]):
-            if (len(buy_orders + sell_orders) < num_open_orders) & ((0.9*usdbal/buyprice[c]) > 0.01):
+            if (len(buy_orders + sell_orders) < num_open_orders) & ((0.9*usdbal/buyprice[c]) > 0.01) & (round(min(cur_max, 0.9*usdbal/buyprice[c]),2) > minsizes[c]):
                 buy(round(min(cur_max, 0.9*usdbal/buyprice[c]),2), c, buyprice[c])
                 out = out.append(pd.DataFrame([[
                         c,
-                        datetime.datetime.strptime(newtime[:19], '%Y-%m-%dT%H:%M:%S'),
+                        newtime,
                         'buyattempt',
                         round(min(cur_max, 0.9*usdbal/buyprice[c]),2),
                         buyprice[c],
@@ -284,11 +308,11 @@ while 1:
                         ]], columns = ['currency', 'time', 'type', 'qty', 'prc', 'netWorth', 'lastPrice', 'mu', 'sd']))
 
         elif (out.loc[out.currency == c].lastPrice.tail(1).iloc[0] > (mu + (1*sd))) & (out.loc[out.currency == c].lastPrice.tail(1).iloc[0] > out.loc[out.currency == c].lastPrice.tail(2).iloc[0]):
-            if (len(buy_orders + sell_orders) < num_open_orders) & (bal[c] > min(cur_max, bal[c])) & (len(sell_orders) == 0):
+            if (len(buy_orders + sell_orders) < num_open_orders) & (bal[c] > min(cur_max, bal[c])) & (len(sell_orders) == 0) & (min(cur_max, bal[c]) > minsizes[c]):
                 sell(min(cur_max, bal[c]), c, sellprice[c])
                 out = out.append(pd.DataFrame([[
                         c,
-                        datetime.datetime.strptime(newtime[:19], '%Y-%m-%dT%H:%M:%S'),
+                        newtime,
                         'sellattempt',
                         min(cur_max, bal[c]),
                         sellprice[c],
@@ -303,11 +327,18 @@ while 1:
     out = removeCompletedOrders(sell_orders + buy_orders, out)
     
     out = out.reset_index(drop = True)
-    out.time = [datetime.datetime.strptime(d[:19], '%Y-%m-%dT%H:%M:%S') if type(d) == str else d for d in out.time]
     
-    out = out.tail(1000)
+    out = out.tail(10)
     out = out.reset_index(drop = True)
-    plotResults(out)
+    out = out.sort_values('time')
     
-    time.sleep(5)
+    current_btc = getPrices('BTC')['price']
+    current_pot = getTotalWorth()
+
+    returns[0] = (current_btc - starting_btc) / starting_btc
+    returns[1] = (current_pot - starting_pot) / starting_pot
+    returns[2] = returns[1] - returns[0]
     
+    plotResults(out, b, returns)
+    
+    time.sleep(3)
