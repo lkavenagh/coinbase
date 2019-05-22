@@ -57,7 +57,8 @@ class Trader:
         
         self.setAccountIds()
         
-    def getRecentTrades(self, account_id, N):
+    def getRecentTrades(self, currency, N):
+        account_id = self.account_ids[currency]
         txs = self.client.get_transactions(account_id)['data']
 
         maxTrades = min(N, len(txs))
@@ -87,8 +88,25 @@ class Trader:
                                 payment_method = self.getUSDWalletID())
         return(sell)
 
+    def getBuyQuote(self, currency, qty = 1):
+        buy = self.client.buy(account_id = self.account_ids[currency], 
+                              amount = qty, 
+                              currency = currency, 
+                              payment_method = self.getUSDWalletID(),
+                              quote = True)
+        
+        return(buy['total']['amount'])
+    
+    def getSellQuote(self, currency, qty = 1):
+        sell = self.client.sell(account_id = self.account_ids[currency], 
+                              amount = qty, 
+                              currency = currency, 
+                              payment_method = self.getUSDWalletID(),
+                              quote = True)
+        
+        return(sell['total']['amount'])
+    
     def cancelAll(self):
-        ## TODO: need to account for multiple pages? Pagination?
         txs = self.client.get_transactions(self.account_ids['USD'])['data']
         
         for tx in txs:
