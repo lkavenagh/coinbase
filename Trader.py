@@ -1,27 +1,10 @@
-#!/usr/bin/env python
-# -*- coding: latin-1 -*-
-
-# Requires python-requests. Install with pip:
-#
-#   pip install requests
-#
-# or, with easy-install:
-#
-#   easy_install requests
-
 import os, sys
 sys.path.append(os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'], 'documents\github\coinbase'))
 import pandas as pd
 from datetime import datetime
 from dateutil import tz
-import hashlib
-import hmac
-import requests
-import time
 
-from requests.auth import AuthBase
-
-requests.packages.urllib3.disable_warnings()
+from coinbase.wallet.client import Client
 
 def readConfig(key):
     config = pd.read_csv(os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'], 'documents\config.txt'), header = None)
@@ -65,264 +48,79 @@ class Trader:
         self.from_zone = tz.gettz('UTC')
         self.to_zone = tz.gettz('America/New_York')
         
-        self.api_url = readConfig('coinbaseapiurl')
-        self.auth = HMACAuth(readConfig('coinbaseapikey'), readConfig('coinbasesecret'), readConfig('coinbasepassphrase'))
-        self.usdBalance, self.btcBalance = self.printBalances(True)
+        self.client = Client(readConfig('coinbaseapikey'), readConfig('coinbasesecret'))
         
-    def sendApiGet(self, call_url):
-        return(requests.get(self.api_url + call_url, auth = self.auth))
-    
-    def sendApiPost(self, call_url, payload):
-        return(requests.post(self.api_url + call_url, json=payload, auth = self.auth))
+        self.balances = dict()
+        self.account_ids = dict()
         
-    def sendApiDelete(self, call_url):
-        return(requests.delete(self.api_url + call_url, auth = self.auth))
+        self.getBalances()
         
-    def getRecentTrades(self, N, auth):
-        r = sendApiGet('products/BTC-USD/trades')
-        while not hasattr(r, 'json'):
-            time.sleep(1)
-            r = sendApiGet('products/BTC-USD/trades')
+        self.setAccountIds()
+        
+    def getRecentTrades(self, account_id, N):
+        txs = self.client.get_transactions(account_id)['data']
 
-        maxTrades = min(N, len(r.json()))
-        out = [{'side':r.json()[i]['side'],'price':r.json()[i]['price'],'time':r.json()[i]['time']} for i in range(0, maxTrades)]
+        maxTrades = min(N, len(txs))
+        out = [{'type':txs[i]['type'],
+                'time':txs[i]['created_at'],
+                'amount':txs[i]['amount']['amount'],
+                'currency':txs[i]['amount']['currency'],
+                'native_amount':txs[i]['native_amount']['amount'],
+                'native_currency':txs[i]['native_amount']['currency']
+               } for i in range(0, maxTrades)]
 
         return out
 
-    def lastXHrsPerf(self, X, auth):
-        r = makeApiGet('fills').json()
-        fees = 0
-        buyCost = 0
-        sellCost = 0
-        buyQty = 0
-        sellQty = 0
-        for i in range(0,len(r)):
-            if (datetime.strptime(r[i]['created_at'], '%Y-%m-%dT%H:%M:%S.%fZ') >= START_TIME):
-                fees += float(r[i]['fee'])
-                if r[i]['side'] == 'buy':
-                    buyCost += float(r[i]['price']) * float(r[i]['size'])
-                    buyQty += float(r[i]['size'])
-                else:
-                    sellCost += float(r[i]['price']) * float(r[i]['size'])
-                    sellQty += float(r[i]['size'])
+    def buy(self, currency, qty):
+        print('Buying {} of {} from account_id {}'.format(qty, currency, self.getUSDWalletID()))
+        buy = self.client.buy(account_id = self.account_ids[currency], 
+                              amount = qty, 
+                              currency = currency, 
+                              payment_method = self.getUSDWalletID())
+        return(buy)
 
-        if buyQty != 0:
-            buyCost = buyCost / buyQty
-
-        if sellQty != 0:
-            sellCost = sellCost / sellQty
-
-        book = getOrderBook()
-        mm_price = (float(book['asks'][0][0]) + float(book['bids'][0][0])) / 2
-
-        self.usdBalance, self.btcBalance = printBalances(False)
-
-        message = ('Fees: ' + str(fees) +
-            '\nAvg. buy price: ' + str(round(buyCost,2)) +
-            '\nAvg. sell price: ' + str(round(sellCost,2)) +
-            '\n\nTotal trading profit: ' + str(round((sellCost*sellQty) - (buyCost*buyQty) - fees, 2)) +
-            '\n\nCurrent account value: $' + str(mm_price * self.btcBalance + self.usdBalance) + '\n'
-            )
-
-        return(message)
-
-    def buy(self, qty, limit):
-        order = {
-            'size': qty,
-            'price': limit,
-            'side': 'buy',
-            'product_id': 'BTC-USD',
-        }
-        print('Buying ' + str(qty) + ' @ $' + str(limit) + ' limit.')
-        r = sendApiPost('orders', order)
-        return(r.json())
-
-    def sell(self, qty, limit):
-        order = {
-            'size': qty,
-            'price': limit,
-            'side': 'sell',
-            'product_id': 'BTC-USD',
-        }
-        print('Selling ' + str(qty) + ' @ $' + str(limit) + ' limit.')
-        r = sendApiPost('orders', order)
-        return(r.json())
-
-    def sellLimit(self, qty, limit):
-        print(datetime.now())
-        print('SELL ' + str(qty) + 'BTC @ $' + str(limit))
-        attempts = 0
-        r = sell(qty, limit, auth)
-        time.sleep(5)
-        status = sendApiGet('orders/' + r['id']).json()
-        while not status.has_key('status'):
-            print(status)
-            time.sleep(1)
-            status = sendApiGet('orders/' + r['id']).json()
-
-        while status['status'] != 'done' and attempts < TRADE_ATTEMPTS-1:
-            attempts += 1
-            sendApiDelete('orders/' + r['id'])
-            time.sleep(1)
-            book = getOrderBook()
-            r = sell(qty, max(limit, float(book['asks'][0][0])))
-            time.sleep(5)
-            status = sendApiGet('orders/' + r['id']).json()
-
-        if status['status'] == 'done':
-            print(datetime.now())
-            print('SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']) + "\n")
-            m = lastXHrsPerf(24, self.auth)
-            print(m)
-            sendEmail('BTC_BOT SOLD ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
-            return(True, status['price'])
-        else:
-            print('SELL order not filled, cancelling')
-            cancelAll()
-            return(False, -1)
-
-    def buyLimit(self, qty, limit):
-        print(datetime.now())
-        print('BUY ' + str(qty) + 'BTC @ $' + str(limit))
-        attempts = 0
-        r = buy(qty, limit, self.auth)
-        time.sleep(5)
-        status = sendApiGet('orders/' + r['id']).json()
-        while not status.has_key('status'):
-            print('Status not found...')
-            time.sleep(1)
-            status = sendApiGet('orders/' + r['id']).json()
-
-        while status['status'] != 'done' and attempts < TRADE_ATTEMPTS-1:
-            attempts += 1
-            sendApiDelete('orders/' + r['id'])
-            time.sleep(1)
-            book = getOrderBook()
-            r = buy(qty, min(limit, float(book['bids'][0][0])), self.auth)
-            time.sleep(5)
-            status = sendApiGet('orders/' + r['id']).json()
-
-        if status['status'] == 'done':
-            print(datetime.now())
-            print('BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']) + "\n")
-            m = lastXHrsPerf(24, auth)
-            print(m)
-            sendEmail('BTC_BOT BOUGHT ' + str(status['size']) + 'BTC @ $' + str(status['price']), m)
-            return(True,status['price'])
-        else:
-            print('BUY order not filled, cancelling')
-            cancelAll()
-            return(False, -1)
+    def sell(self, currency, qty):
+        print('Selling {} of {}'.format(qty, currency))
+        sell = self.client.sell(account_id = self.account_ids[currency], 
+                                amount = qty, 
+                                currency = currency, 
+                                payment_method = self.getUSDWalletID())
+        return(sell)
 
     def cancelAll(self):
-        sendApiDelete('orders')
-        print('Cancelled all orders')
-        print(json.dumps(r.json(), indent=4, sort_keys=True))
-
-    def getMyOrders(self):
-        r = sendApiGet('orders')
-        return r.json()
-
-    def decideSide(self, trades, book, lastTrade):
-        lastMarketTrade = trades[0]['side']
-        tradeHist = []
-        for i in range(0,LAST_N_TRADES):
-            if trades[i]['side'] == 'sell':
-                tradeHist.append(1)
+        ## TODO: need to account for multiple pages? Pagination?
+        txs = self.client.get_transactions(self.account_ids['USD'])['data']
+        
+        for tx in txs:
+            if tx['status'] == 'pending':
+                tx = self.client.cancel_request(tx[tx['type']]['id'], tx['id'])
+                print('Cancelled transaction {}'.format(tx['id']))
             else:
-                tradeHist.append(-1)
-
-        if lastTrade['side'] == 'buy':
-            if trades[0]['price'] > lastTrade['price'] or trades[0]['price'] < lastTrade['price'] - DOUBLE_DOWN_TOL:
-                oppodiboppo = True
-            else:
-                oppodiboppo = False
-        else:
-            oppodiboppo = True
-
-        if sum(tradeHist) > (LAST_N_TRADES*SELL_PERC_TRADES) and oppodiboppo and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) < TURNAROUND_TRADES:
-            # Price is rising fast
-            nextTrade = 'sell'
-        elif sum(tradeHist) < (-1*LAST_N_TRADES*BUY_PERC_TRADES) and oppodiboppo and sum([tradeHist[i] for i in range(0,TURNAROUND_TRADES)]) > -TURNAROUND_TRADES:
-            # Price is dropping fast
-            nextTrade = 'buy'
-        else:
-            nextTrade = 'None'
-
-        if nextTrade == 'None':
-            return nextTrade
-        else:
-            myOrders = getMyOrders(auth)
-            if len(myOrders) > 0:
-                print('Order still outstanding')
-                nextTrade = 'None'
-
-        if nextTrade == 'buy':
-            requiredUSD = QTY * float(book['asks'][0][0])
-            requiredBTC = 0
-        elif nextTrade == 'sell':
-            requiredUSD = 0
-            requiredBTC = QTY
-        else:
-            requiredUSD = 0
-            requiredBTC = 0
-
-        if (self.usdBalance < requiredUSD or self.btcBalance < requiredBTC):
-            print('Insufficient balance for ' + nextTrade + '. Need USD/BTC ' + str(requiredUSD) + ' / ' + str(requiredBTC))
-            nextTrade = 'None'
-
-        if (nextTrade == lastTrade['side']):
-            # Don't do 2 buys/sells in a row...unless the price is way different
-            if lastTrade['side'] == 'sell' and float(book['asks'][0][0]) < (lastTrade['price'] + DOUBLE_DOWN_TOL):
-                nextTrade = 'None'
-            elif lastTrade['side'] == 'buy' and float(book['bids'][0][0]) > (lastTrade['price'] - DOUBLE_DOWN_TOL):
-                nextTrade = 'None'
-
-        return nextTrade
-
-    def getOrderBook(self):
-        r = sendApiGet('products/BTC-USD/book')
-        while not hasattr(r, 'json'):
-            time.sleep(1)
-            r = sendApiGet('products/BTC-USD/book')
-
-        return r.json()
-
-    def printBalances(self, output):
-        r = sendApiGet(self.api_url + 'accounts').json()
-        for account in r:
-            if account['currency'] == 'USD':
-                self.usdBalance = float(account['balance'])
-            elif account['currency'] == 'BTC':
-                self.btcBalance = float(account['balance'])
-
-        if (output):
-            print('USD/BTC balances: $' + str(round(self.usdBalance,2)) + ' / BTC ' + str(round(self.btcBalance,4)))
-
-# Create custom authentication for Exchange
-class HMACAuth(AuthBase):
-    def __init__(self, api_key, api_secret, api_version):
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.api_version = api_version
-
-    def __call__(self, request):
-        timestamp = str(int(time.time()))
-        message = timestamp + request.method + request.path_url + (request.body or '')
-        secret = self.api_secret
-
-        if not isinstance(message, bytes):
-            message = message.encode()
-        if not isinstance(secret, bytes):
-            secret = secret.encode()
-
-        signature = hmac.new(secret, message, hashlib.sha256).hexdigest()
-        request.headers.update({
-            requests.utils.to_native_string('CB-VERSION'): self.api_version,
-            requests.utils.to_native_string('CB-ACCESS-KEY'): self.api_key,
-            requests.utils.to_native_string('CB-ACCESS-SIGN'): signature,
-            requests.utils.to_native_string('CB-ACCESS-TIMESTAMP'): timestamp,
-        })
-        return request
-
-
+                print('Transaction {} not cancelled'.format(tx['id']))
+                
+    def getBalances(self):
+        accounts = self.client.get_accounts()['data']
+        for account in accounts:
+            self.balances[account['balance']['currency']] = float(account['balance']['amount'])
+            
+    def printBalances(self):
+        self.getBalances()
+        for currency in self.balances.keys():
+            print('{}: {:.4f}'.format(currency, self.balances[currency]))
+            
+    def setAccountIds(self):
+        accounts = self.client.get_accounts()['data']
+        for account in accounts:
+            self.account_ids[account['balance']['currency']] = account['id']
+            
+    def getUSDWalletID(self):
+        pms = self.client.get_payment_methods()['data']
+        for pm in pms:
+            if pm['type'] == 'fiat_account':
+                return(pm['id'])
+            
+    def getUSDBankID(self):
+        pms = self.client.get_payment_methods()['data']
+        for pm in pms:
+            if pm['type'] == 'ach_bank_account':
+                return(pm['id'])
