@@ -5,6 +5,8 @@ import numpy as np
 
 from Trader import Trader
 
+global last_reported_sell_profit, last_reported_buy_profit
+
 def wait_for_price_turnaround(price_type = 'sell'):
     if price_type == 'sell':
         # Wait for price to stop rising
@@ -101,7 +103,7 @@ sys.stdout.write('{}: Anchor price set at ${:.2f}\n'.format(time.strftime('%Y-%m
 sys.stdout.flush()
 
 sell_proceeds = buy_proceeds = -np.Inf
-global last_reported_sell_profit, last_reported_buy_profit
+
 last_reported_sell_profit = last_reported_buy_profit = -np.Inf
 
 total_profit = 0
