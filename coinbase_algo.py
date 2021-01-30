@@ -4,6 +4,9 @@ import time
 
 from Trader import Trader
 
+sys.stdout.write('Starting algo')
+sys.stdout.flush()
+
 trader = Trader()
 
 chunk_size = 1
