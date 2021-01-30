@@ -6,10 +6,17 @@ from Trader import Trader
 
 trader = Trader()
 
-chunk_size = 1
+cc = 'ETH'
 
-lastBuyCost = trader.getBuyQuote('ETH', chunk_size)[0]
-lastSellProceeds = trader.getSellQuote('ETH', chunk_size)[0]
+size_of_trade_usd = 250
+chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
+
+sys.stdout.write('Trading {}\n'.format(cc))
+sys.stdout.write('Chunk size: {:,.4f} {}'.format(chunk_size, cc))
+sys.stdout.flush()
+
+lastBuyCost = trader.getBuyQuote(cc, chunk_size)[0]
+lastSellProceeds = trader.getSellQuote(cc, chunk_size)[0]
 
 sys.stdout.write('{}: First bought at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastBuyCost))
 sys.stdout.write('{}: First sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastSellProceeds))
@@ -20,21 +27,21 @@ lastReportedSellPrice = lastReportedBuyPrice = -1e6
 totalProfit = 0
 totalUSDSpent = 0
 while (newSellProceeds < 0) & (newBuyProceeds < 0):
-    sell_quote = trader.getSellQuote('ETH', chunk_size)
+    sell_quote = trader.getSellQuote(cc, chunk_size)
     if sell_quote is not None:
         sell_quote = sell_quote[0]
         tmp = sell_quote - lastBuyCost
         if tmp > (lastReportedSellPrice + abs(lastReportedSellPrice)*0.05):
-            sys.stdout.write('{}: ETH sell price (${:.2f}) rising: Sell proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), sell_quote, tmp))
+            sys.stdout.write('{}: {} sell price (${:.2f}) rising: Sell proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, sell_quote, tmp))
             lastReportedSellPrice = tmp
         newSellProceeds = tmp
     
-    buy_quote = trader.getBuyQuote('ETH', chunk_size)
+    buy_quote = trader.getBuyQuote(cc, chunk_size)
     if buy_quote is not None:
         buy_quote = buy_quote[0]
         tmp = lastSellProceeds - buy_quote
         if tmp > (lastReportedBuyPrice + abs(lastReportedBuyPrice)*0.05):
-            sys.stdout.write('{}: ETH buy price (${:.2f}) falling: Buy proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_quote, tmp))
+            sys.stdout.write('{}: {} buy price (${:.2f}) falling: Buy proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, buy_quote, tmp))
             lastReportedBuyPrice = tmp
         newBuyProceeds = tmp
     
