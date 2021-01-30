@@ -1,5 +1,4 @@
 import os, sys
-sys.path.append(os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'], 'documents\github\coinbase'))
 import pandas as pd
 from datetime import datetime
 from dateutil import tz
@@ -11,25 +10,6 @@ def readConfig(key):
     config = [c.split('=') for c in config[0]]
     out = [c[1] for c in config if c[0] == key][0]
     return(out)
-
-def sendEmail(subject, body):
-    msg = "\r\n".join([
-      "From: lkavenagh@gmail.com",
-      "To: lkavenagh@gmail.com",
-      "Subject: " + subject,
-      "",
-      body
-      ])
-    fromaddr = 'lkavenagh@gmail.com'
-    toaddrs = 'lkavenagh@gmail.com'
-    username = 'lkavenagh@gmail.com'
-    password = readConfig('gmailpw')
-    server = smtplib.SMTP('smtp.gmail.com', 587)
-    server.ehlo()
-    server.starttls()
-    server.login(username,password)
-    server.sendmail(fromaddr, toaddrs, msg)
-    server.quit()
         
 class Trader:
     def __init__(self):
