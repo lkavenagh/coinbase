@@ -4,7 +4,7 @@ import time
 
 from Trader import Trader
 
-sys.stdout.write('Starting algo')
+sys.stdout.write('Starting algo\n')
 sys.stdout.flush()
 
 trader = Trader()
@@ -16,6 +16,7 @@ lastSellProceeds = trader.getSellQuote('ETH', chunk_size)[0]
 
 sys.stdout.write('{}: Last bought at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastBuyCost))
 sys.stdout.write('{}: Last sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastSellProceeds))
+sys.stdout.flush()
 
 newSellProceeds = newBuyProceeds = -1
 totalProfit = 0
@@ -56,6 +57,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
         sys.stdout.write('{}: Last sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastSellProceeds))
         newBuyProceeds = -1
         
+    sys.stdout.flush()
     time.sleep(5)
     
 
