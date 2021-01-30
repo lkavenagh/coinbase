@@ -5,8 +5,6 @@ import numpy as np
 
 from Trader import Trader
 
-global last_reported_sell_profit, last_reported_buy_profit
-
 def wait_for_price_turnaround(price_type = 'sell'):
     if price_type == 'sell':
         # Wait for price to stop rising
@@ -51,6 +49,8 @@ def wait_for_price_turnaround(price_type = 'sell'):
         return(1)
 
 def wait_for_profitable_margin():
+    global last_reported_sell_profit, last_reported_buy_profit, sell_proceeds, buy_proceeds
+    
     sell_quote = trader.getSellQuote(cc, chunk_size)[0]
     sell_proceeds = sell_quote - last_buy_cost
     
