@@ -38,10 +38,8 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
             lastReportedBuyPrice = tmp
         newBuyProceeds = tmp
     
-    sys.stdout.write('\n')
-    
     if newSellProceeds > 0:
-        sys.stdout.write('{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+        sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New sell generates ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newSellProceeds))
         totalProfit += newSellProceeds
         lastSellProceeds = sell_quote
@@ -56,7 +54,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
         newSellProceeds = -1
         
     if newBuyProceeds > 0:
-        sys.stdout.write('{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+        sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New buy would generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newBuyProceeds))
         totalProfit += newBuyProceeds
         lastBuyCost = buy_quote
