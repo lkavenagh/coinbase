@@ -6,7 +6,7 @@ from dateutil import tz
 from coinbase.wallet.client import Client
 
 def readConfig(key):
-    if os.environ['USERNAME'] == 'lkave':
+    if ('USERNAME' in os.environ.keys()) and (os.environ['USERNAME'] == 'lkave'):
         config = pd.read_csv(r"C:\Users\lkave\Documents\GitHub\config.txt", header = None)
     else:
         config = pd.read_csv(os.path.join('/', 'home', 'lkavenagh', 'config.txt'), header = None)
