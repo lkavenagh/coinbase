@@ -104,7 +104,7 @@ sys.stdout.flush()
 
 sell_proceeds = buy_proceeds = -np.Inf
 
-last_reported_sell_profit = last_reported_buy_profit = -np.Inf
+last_reported_sell_profit = last_reported_buy_profit = -1e6
 
 total_profit = 0
 
@@ -129,7 +129,6 @@ while(1):
 
         total_profit += sell_proceeds
         last_sell_proceeds = sell_quote
-        last_reported_sell_profit = 0
 
         cc_balance -= float(sell_order.amount.amount)
         usd_balance += sell_quote
@@ -155,7 +154,6 @@ while(1):
 
         total_profit += buy_proceeds
         last_buy_cost = buy_quote
-        last_reported_buy_profit = 0
 
         cc_balance += float(buy_order.amount.amount)
         usd_balance -= buy_quote
@@ -188,4 +186,6 @@ while(1):
         last_buy_cost = trader.getBuyQuote(cc, chunk_size)[0]
         last_sell_proceeds = trader.getSellQuote(cc, chunk_size)[0]
         
+    last_reported_sell_profit = last_reported_buy_profit = -1e6
+    
     time.sleep(5)
