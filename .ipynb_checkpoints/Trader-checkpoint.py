@@ -73,38 +73,54 @@ class Trader:
         return out
 
     def buy(self, currency, qty):
-        print('Buying {} of {} from account_id {}'.format(qty, currency, self.getUSDWalletID()))
         buy = self.client.buy(account_id = self.account_ids[currency], 
                               amount = qty, 
                               currency = currency, 
-                              payment_method = self.getUSDWalletID())
+                              payment_method = self.getUSDWalletID(),
+                              commit = False)
+        print('Buying {:.2f} of {}: ${:.2f} + ${:.2f} = USD${:.4f}'.format(float(buy.amount.amount), buy.amount.currency, float(buy.subtotal.amount), float(buy.fee.amount), float(buy.total.amount)))
         return(buy)
+    
+    def commit_buy(self, buy_order):
+        self.client.commit_buy(self.account_ids[buy_order.amount['currency']], buy_order.id)
 
     def sell(self, currency, qty):
-        print('Selling {} of {}'.format(qty, currency))
         sell = self.client.sell(account_id = self.account_ids[currency], 
                                 amount = qty, 
                                 currency = currency, 
-                                payment_method = self.getUSDWalletID())
+                                payment_method = self.getUSDWalletID(),
+                                commit = False)
+        print('Selling {:.2f} of {}: ${:.2f} - ${:.2f} = USD${:.4f}'.format(float(sell.amount.amount), sell.amount.currency, float(sell.subtotal.amount), float(sell.fee.amount), float(sell.total.amount)))
         return(sell)
+    
+    def commit_sell(self, sell_order):
+        self.client.commit_sell(self.account_ids[sell_order.amount['currency']], sell_order.id)
 
     def getBuyQuote(self, currency, qty = 1):
-        buy = self.client.buy(account_id = self.account_ids[currency], 
+        try:
+            buy = self.client.buy(account_id = self.account_ids[currency], 
                               amount = qty, 
                               currency = currency, 
                               payment_method = self.getUSDWalletID(),
                               quote = True)
+        except:
+            print('Timed out')
+            return(None)
         
-        return(buy['total']['amount'])
+        return(float(buy['total']['amount']), float(buy['fee']['amount']))
     
     def getSellQuote(self, currency, qty = 1):
-        sell = self.client.sell(account_id = self.account_ids[currency], 
+        try:
+            sell = self.client.sell(account_id = self.account_ids[currency], 
                               amount = qty, 
                               currency = currency, 
                               payment_method = self.getUSDWalletID(),
                               quote = True)
+        except:
+            print('Timed out')
+            return(None)
         
-        return(sell['total']['amount'])
+        return(float(sell['total']['amount']), float(sell['fee']['amount']))
     
     def cancelAll(self):
         txs = self.client.get_transactions(self.account_ids['USD'])['data']
@@ -123,14 +139,21 @@ class Trader:
             
     def printBalances(self):
         self.getBalances()
-        for currency in self.balances.keys():
-            print('{}: {:.4f}'.format(currency, self.balances[currency]))
+        currs = sorted(self.balances.keys())
+        currs.remove('USD')
+        for currency in ['USD'] + currs:
+            if (self.balances[currency] > 0) | (currency == 'USD'):
+                print('{}: {:.4f}'.format(currency, self.balances[currency]))
             
     def setAccountIds(self):
         accounts = self.client.get_accounts()['data']
         for account in accounts:
             self.account_ids[account['balance']['currency']] = account['id']
             
+    def getPaymentMethods(self):
+        pms = self.client.get_payment_methods()['data']
+        return(pms)
+        
     def getUSDWalletID(self):
         pms = self.client.get_payment_methods()['data']
         for pm in pms:
