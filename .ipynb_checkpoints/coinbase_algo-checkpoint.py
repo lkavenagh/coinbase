@@ -16,7 +16,7 @@ sys.stdout.write('{}: First sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H
 sys.stdout.flush()
 
 newSellProceeds = newBuyProceeds = -1
-lastReportedSellPrice = lastReportedBuyPrice = 0
+lastReportedSellPrice = lastReportedBuyPrice = -1e6
 totalProfit = 0
 totalUSDSpent = 0
 while (newSellProceeds < 0) & (newBuyProceeds < 0):
