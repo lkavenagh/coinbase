@@ -5,11 +5,81 @@ import numpy as np
 
 from Trader import Trader
 
-trader = Trader()
+def wait_for_price_turnaround(price_type = 'sell'):
+    if price_type == 'sell':
+        # Wait for price to stop rising
+        sell_quote = trader.getSellQuote(cc, chunk_size)[0]
+        sell_proceeds = sell_quote - last_buy_cost
+        stop_loss = (sell_proceeds/2) + last_buy_cost
+        while sell_quote > stop_loss:
+            sell_quote = trader.getSellQuote(cc, chunk_size)[0]
+            
+            new_sell_proceeds = sell_quote - last_buy_cost
+            if new_sell_proceeds > sell_proceeds:
+                stop_loss = (new_sell_proceeds/2) + last_buy_cost
+                sell_proceeds = new_sell_proceeds
+                sys.stdout.write('{}: Price still rising, new sell would currently generate ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), new_sell_proceeds))
+            elif sell_quote <= stop_loss:
+                sys.stdout.write('{}: Price has turned around and hit stop loss\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+                break
+            
+            time.sleep(5)
+        
+        return(1)
+            
+    elif price_type == 'buy':
+        # Wait for price to stop falling
+        buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
+        buy_proceeds = last_sell_cost - buy_quote
+        stop_loss = last_sell_cost - (buy_proceeds/2)
+        while buy_quote < stop_loss:
+            buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
+            
+            new_buy_proceeds = last_sell_cost - buy_quote
+            if new_buy_proceeds > buy_proceeds:
+                stop_loss = last_sell_cost - (new_buy_proceeds/2)
+                buy_proceeds = new_buy_proceeds
+                sys.stdout.write('{}: Price still falling, new buy would currently generate ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), new_buy_proceeds))
+            elif buy_quote >= stop_loss:
+                sys.stdout.write('{}: Price has turned around and hit stop loss\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
+                break
+            
+            time.sleep(5)
+        
+        return(1)
 
-# global cc, profit_margin_usd, size_of_trade_usd, chunk_size
-# global last_buy_cost, last_sell_proceeds, total_profit, total_usd_spent
-# global buy_proceeds, sell_proceeds
+def wait_for_profitable_margin():
+    sell_quote = trader.getSellQuote(cc, chunk_size)[0]
+    sell_proceeds = sell_quote - last_buy_cost
+    
+    buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
+    buy_proceeds = last_sell_proceeds - buy_quote
+    
+    while (sell_proceeds < profit_margin_usd) & (buy_proceeds < profit_margin_usd):
+        sell_quote = trader.getSellQuote(cc, chunk_size)
+        if sell_quote is not None:
+            sell_quote = sell_quote[0]
+            tmp = sell_quote - last_buy_cost
+            if tmp > (last_reported_sell_profit + abs(last_reported_sell_profit)*0.05):
+                sys.stdout.write('{}: {} sell price (${:.2f}) rising: Sell proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, sell_quote, tmp))
+                last_reported_sell_profit = tmp
+            sell_proceeds = tmp
+
+        buy_quote = trader.getBuyQuote(cc, chunk_size)
+        if buy_quote is not None:
+            buy_quote = buy_quote[0]
+            tmp = last_sell_proceeds - buy_quote
+            if tmp > (last_reported_buy_profit + abs(last_reported_buy_profit)*0.05):
+                sys.stdout.write('{}: {} buy price (${:.2f}) falling: Buy proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, buy_quote, tmp))
+                last_reported_buy_profit = tmp
+            buy_proceeds = tmp
+            
+        sys.stdout.flush()
+        time.sleep(5)
+        
+    return(1)
+
+trader = Trader()
 
 cc = 'ETH'
 profit_margin_usd = 10
@@ -116,78 +186,3 @@ while(1):
         last_sell_proceeds = trader.getSellQuote(cc, chunk_size)[0]
         
     time.sleep(5)
-
-    
-def wait_for_price_turnaround(price_type = 'sell'):
-    if price_type == 'sell':
-        # Wait for price to stop rising
-        sell_quote = trader.getSellQuote(cc, chunk_size)[0]
-        sell_proceeds = sell_quote - last_buy_cost
-        stop_loss = (sell_proceeds/2) + last_buy_cost
-        while sell_quote > stop_loss:
-            sell_quote = trader.getSellQuote(cc, chunk_size)[0]
-            
-            new_sell_proceeds = sell_quote - last_buy_cost
-            if new_sell_proceeds > sell_proceeds:
-                stop_loss = (new_sell_proceeds/2) + last_buy_cost
-                sell_proceeds = new_sell_proceeds
-                sys.stdout.write('{}: Price still rising, new sell would currently generate ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), new_sell_proceeds))
-            elif sell_quote <= stop_loss:
-                sys.stdout.write('{}: Price has turned around and hit stop loss\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
-                break
-            
-            time.sleep(5)
-        
-        return(1)
-            
-    elif price_type == 'buy':
-        # Wait for price to stop falling
-        buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
-        buy_proceeds = last_sell_cost - buy_quote
-        stop_loss = last_sell_cost - (buy_proceeds/2)
-        while buy_quote < stop_loss:
-            buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
-            
-            new_buy_proceeds = last_sell_cost - buy_quote
-            if new_buy_proceeds > buy_proceeds:
-                stop_loss = last_sell_cost - (new_buy_proceeds/2)
-                buy_proceeds = new_buy_proceeds
-                sys.stdout.write('{}: Price still falling, new buy would currently generate ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), new_buy_proceeds))
-            elif buy_quote >= stop_loss:
-                sys.stdout.write('{}: Price has turned around and hit stop loss\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
-                break
-            
-            time.sleep(5)
-        
-        return(1)
-
-def wait_for_profitable_margin():
-    sell_quote = trader.getSellQuote(cc, chunk_size)[0]
-    sell_proceeds = sell_quote - last_buy_cost
-    
-    buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
-    buy_proceeds = last_sell_proceeds - buy_quote
-    
-    while (sell_proceeds < profit_margin_usd) & (buy_proceeds < profit_margin_usd):
-        sell_quote = trader.getSellQuote(cc, chunk_size)
-        if sell_quote is not None:
-            sell_quote = sell_quote[0]
-            tmp = sell_quote - last_buy_cost
-            if tmp > (last_reported_sell_profit + abs(last_reported_sell_profit)*0.05):
-                sys.stdout.write('{}: {} sell price (${:.2f}) rising: Sell proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, sell_quote, tmp))
-                last_reported_sell_profit = tmp
-            sell_proceeds = tmp
-
-        buy_quote = trader.getBuyQuote(cc, chunk_size)
-        if buy_quote is not None:
-            buy_quote = buy_quote[0]
-            tmp = last_sell_proceeds - buy_quote
-            if tmp > (last_reported_buy_profit + abs(last_reported_buy_profit)*0.05):
-                sys.stdout.write('{}: {} buy price (${:.2f}) falling: Buy proceeds would now be ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, buy_quote, tmp))
-                last_reported_buy_profit = tmp
-            buy_proceeds = tmp
-            
-        sys.stdout.flush()
-        time.sleep(5)
-        
-    return(1)
