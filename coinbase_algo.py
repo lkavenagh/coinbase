@@ -20,7 +20,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
     if sell_quote is not None:
         sell_quote = sell_quote[0]
         tmp = sell_quote - lastBuyCost
-        if tmp > (newSellProceeds + abs(newSellProceeds)*0.1):
+        if tmp > (newSellProceeds + abs(newSellProceeds)*0.01):
             print('ETH sell price (${:.2f}) rising: Sell proceeds would now be ${:.2f}'.format(sell_quote, tmp))
         newSellProceeds = tmp
     
@@ -28,7 +28,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
     if buy_quote is not None:
         buy_quote = buy_quote[0]
         tmp = lastSellProceeds - buy_quote
-        if tmp > (newBuyProceeds + abs(newBuyProceeds)*0.1):
+        if tmp > (newBuyProceeds + abs(newBuyProceeds)*0.01):
             print('ETH buy price (${:.2f}) falling: Buy proceeds would now be ${:.2f}'.format(buy_quote, tmp))
         newBuyProceeds = tmp
     
