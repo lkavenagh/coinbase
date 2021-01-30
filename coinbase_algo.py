@@ -7,6 +7,7 @@ from Trader import Trader
 trader = Trader()
 
 cc = 'ETH'
+profit_margin_usd = 10
 
 size_of_trade_usd = 250
 chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
@@ -26,7 +27,7 @@ newSellProceeds = newBuyProceeds = -1
 lastReportedSellPrice = lastReportedBuyPrice = -1e6
 totalProfit = 0
 totalUSDSpent = 0
-while (newSellProceeds < 0) & (newBuyProceeds < 0):
+while (newSellProceeds < profit_margin_usd) & (newBuyProceeds < profit_margin_usd):
     sell_quote = trader.getSellQuote(cc, chunk_size)
     if sell_quote is not None:
         sell_quote = sell_quote[0]
@@ -45,7 +46,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
             lastReportedBuyPrice = tmp
         newBuyProceeds = tmp
     
-    if newSellProceeds > 0:
+    if newSellProceeds > profit_margin_usd:
         sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New sell generates ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newSellProceeds))
         totalProfit += newSellProceeds
@@ -60,7 +61,7 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
         sys.stdout.write('{}: Last sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), lastSellProceeds))
         newSellProceeds = -1
         
-    if newBuyProceeds > 0:
+    if newBuyProceeds > profit_margin_usd:
         sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New buy would generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newBuyProceeds))
         totalProfit += newBuyProceeds
@@ -79,3 +80,5 @@ while (newSellProceeds < 0) & (newBuyProceeds < 0):
     time.sleep(5)
     
 
+sys.stdout.write('Exited.')
+sys.stdout.flush()
