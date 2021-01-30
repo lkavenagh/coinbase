@@ -13,7 +13,7 @@ size_of_trade_usd = 250
 chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
 
 sys.stdout.write('Trading {}\n'.format(cc))
-sys.stdout.write('Chunk size: {:,.4f} {}'.format(chunk_size, cc))
+sys.stdout.write('Chunk size: {:,.4f} {}\n\n'.format(chunk_size, cc))
 sys.stdout.flush()
 
 lastBuyCost = trader.getBuyQuote(cc, chunk_size)[0]
