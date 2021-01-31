@@ -84,7 +84,7 @@ def wait_for_profitable_margin():
 trader = Trader()
 
 cc = 'BTC'
-profit_margin_usd = 10
+profit_margin_usd = 1
 
 size_of_trade_usd = 250
 chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
