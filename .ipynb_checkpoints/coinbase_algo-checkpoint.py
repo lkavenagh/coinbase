@@ -162,7 +162,7 @@ while(1):
         else:
             cc_balance -= float(sell_order.amount.amount)
         
-        usd_balance += sell_quote
+        usd_balance += (trader.getSellQuote(cc, chunk_size)[0] + trader.getBuyQuote(cc, chunk_size)[0]) / 2
 
         sys.stdout.write('{}: USD balance: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), usd_balance))
         sys.stdout.write('{}: {} balance: {:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, cc_balance))
@@ -198,7 +198,7 @@ while(1):
             cc_balance += chunk_size
         else:
             cc_balance += float(buy_order.amount.amount)
-        usd_balance -= buy_quote
+        usd_balance -= (trader.getSellQuote(cc, chunk_size)[0] + trader.getBuyQuote(cc, chunk_size)[0]) / 2
 
         sys.stdout.write('{}: USD balance: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), usd_balance))
         sys.stdout.write('{}: {} balance: {:.4f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, cc_balance))
@@ -221,7 +221,7 @@ while(1):
             buy_quote = buy_order.total.amount
             cc_balance += float(buy_order.amount.amount)
         
-        usd_balance -= buy_quote
+        usd_balance -= (trader.getSellQuote(cc, chunk_size)[0] + trader.getBuyQuote(cc, chunk_size)[0]) / 2
             
         last_buy_cost = buy_quote
         sys.stdout.write('{}: Buying (to rebalance) - cost: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_buy_cost))
@@ -238,7 +238,7 @@ while(1):
             sell_quote = sell_order.total.amount
             cc_balance -= float(sell_order.amount.amount)
         
-        usd_balance += sell_quote
+        usd_balance += (trader.getSellQuote(cc, chunk_size)[0] + trader.getBuyQuote(cc, chunk_size)[0]) / 2
             
         last_sell_proceeds = sell_quote
         sys.stdout.write('{}: Selling (to rebalance) - proceeds: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_sell_proceeds))
