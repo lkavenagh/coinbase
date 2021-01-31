@@ -112,13 +112,18 @@ cc_balance = 0.15
 usd_balance = 500
 
 while(1):
+    sys.stdout.write('{} balance: {:,.4f}\n'.format(cc, cc_balance))
+    sys.stdout.write('{} balance: {:,.4f}\n\n'.format('USD', usd_balance))
+    sys.stdout.flush()
+    
     wait_for_profitable_margin()
 
     if sell_proceeds > profit_margin_usd:
         # Price is rising. Wait for it to start turning around
         sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New sell would currently generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), sell_proceeds))
-
+        sys.stdout.flush()
+        
         wait_for_price_turnaround('sell')
 
         sell_order = trader.sell(cc, chunk_size)
@@ -138,12 +143,15 @@ while(1):
         sys.stdout.write('{}: Last bought at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_buy_cost))
         sys.stdout.write('{}: Last sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_sell_proceeds))
         sell_proceeds = -np.Inf
+        sys.stdout.flush()
+
 
     if buy_proceeds > profit_margin_usd:
         # Price is falling. Wait for it to turn around
         sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
         sys.stdout.write('{}: New buy would currently generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newBuyProceeds))
-
+        sys.stdout.flush()
+        
         wait_for_price_turnaround('buy')
 
         buy_order = trader.buy(cc, chunk_size)
@@ -163,6 +171,8 @@ while(1):
         sys.stdout.write('{}: Last bought at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_buy_cost))
         sys.stdout.write('{}: Last sold at ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_sell_proceeds))
         buy_proceeds = -np.Inf
+        sys.stdout.flush()
+        
 
     # Finished one iteration - need to reset last buy/sell price
     # Complete another buy/sell if we are out of balance in CC or USD
@@ -172,6 +182,7 @@ while(1):
         buy_quote = buy_order.total.amount
         last_buy_cost = buy_quote
         sys.stdout.write('{}: Buying (to rebalance) - cost: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_buy_cost))
+        sys.stdout.flush()
         last_sell_proceeds = trader.getSellQuote(cc, chunk_size)[0]
         
     elif usd_balance < size_of_trade_usd:
@@ -180,12 +191,16 @@ while(1):
         sell_quote = sell_order.total.amount
         last_sell_proceeds = sell_quote
         sys.stdout.write('{}: Selling (to rebalance) - proceeds: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_sell_proceeds))
+        sys.stdout.flush()
         last_buy_cost = trader.getBuyQuote(cc, chunk_size)[0]
         
     else:
         last_buy_cost = trader.getBuyQuote(cc, chunk_size)[0]
         last_sell_proceeds = trader.getSellQuote(cc, chunk_size)[0]
         
+    sys.stdout.write('Finished an iteration\n')
+    sys.stdout.flush()
+    
     last_reported_sell_profit = last_reported_buy_profit = -1e6
     
     time.sleep(5)
