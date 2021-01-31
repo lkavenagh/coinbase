@@ -84,7 +84,7 @@ def wait_for_profitable_margin():
 trader = Trader()
 
 cc = 'BTC'
-profit_margin_usd = 1
+profit_margin_usd = -5
 
 size_of_trade_usd = 250
 chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
@@ -146,10 +146,10 @@ while(1):
         sys.stdout.flush()
 
 
-    if buy_proceeds > profit_margin_usd:
+    elif buy_proceeds > profit_margin_usd:
         # Price is falling. Wait for it to turn around
         sys.stdout.write('\n{}: Profitable trade!\n'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
-        sys.stdout.write('{}: New buy would currently generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), newBuyProceeds))
+        sys.stdout.write('{}: New buy would currently generate ${:.2f}\n\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_proceeds))
         sys.stdout.flush()
         
         wait_for_price_turnaround('buy')
