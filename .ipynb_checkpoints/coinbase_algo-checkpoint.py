@@ -13,10 +13,7 @@ def wait_for_price_turnaround(price_type = 'sell'):
         print('Last buy cost: {:.2f}'.format(last_buy_cost))
         sell_proceeds = sell_quote - last_buy_cost
         print('Current sell proceeds: {:.2f}'.format(sell_proceeds))
-        if test:
-            stop_loss = sell_quote - 1
-        else:
-            stop_loss = (sell_proceeds/2) + last_buy_cost
+        stop_loss = (sell_proceeds/2) + last_buy_cost
             
         print('Price at which turnaround is true: {:.2f}'.format(stop_loss))
 
@@ -25,10 +22,7 @@ def wait_for_price_turnaround(price_type = 'sell'):
             
             new_sell_proceeds = sell_quote - last_buy_cost
             if new_sell_proceeds > sell_proceeds:
-                if test:
-                    stop_loss = sell_quote - 1
-                else:
-                    stop_loss = (sell_proceeds/2) + last_buy_cost
+                stop_loss = (sell_proceeds/2) + last_buy_cost
                 sell_proceeds = new_sell_proceeds
                 sys.stdout.write('{}: Price (${:.2f}) still rising, new sell would currently generate ${:.2f} stop loss adjusted to ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), sell_quote, new_sell_proceeds, stop_loss))
             
@@ -42,20 +36,14 @@ def wait_for_price_turnaround(price_type = 'sell'):
         # Wait for price to stop falling
         buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
         buy_proceeds = last_sell_cost - buy_quote
-        if test:
-            stop_loss = buy_quote + 1
-        else:
-            stop_loss = last_sell_cost - (buy_proceeds/2)
+        stop_loss = last_sell_cost - (buy_proceeds/2)
 
         while buy_quote < stop_loss:
             buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
             
             new_buy_proceeds = last_sell_cost - buy_quote
             if new_buy_proceeds > buy_proceeds:
-                if test:
-                    stop_loss = buy_quote + 1
-                else:
-                    stop_loss = last_sell_cost - (buy_proceeds/2)
+                stop_loss = last_sell_cost - (buy_proceeds/2)
                 buy_proceeds = new_buy_proceeds
                 sys.stdout.write('{}: Price (${:.2f}) still falling, new buy would currently generate ${:.2f} (stop loss adjusted to ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_quote, new_buy_proceeds, stop_loss))
             
@@ -102,7 +90,7 @@ trader = Trader()
 
 cc = 'BTC'
 profit_margin_usd = 1
-test = False
+test = True
 
 size_of_trade_usd = 250
 chunk_size = size_of_trade_usd / trader.getBuyQuote(cc, 1)[0]
