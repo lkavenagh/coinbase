@@ -88,7 +88,7 @@ def wait_for_profitable_margin():
 
 trader = Trader()
 
-cc = 'BTC'
+cc = 'ETH'
 profit_margin_usd = 1
 test = True
 
@@ -114,8 +114,8 @@ last_reported_sell_profit = last_reported_buy_profit = -1e6
 
 total_profit = 0
 
-cc_balance = 0.01
-usd_balance = 500
+cc_balance = 1
+usd_balance = 1000
 
 while(1):
     sys.stdout.write('{} balance: {:,.4f}\n'.format(cc, cc_balance))
