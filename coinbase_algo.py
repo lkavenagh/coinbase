@@ -13,7 +13,7 @@ def wait_for_price_turnaround(price_type = 'sell'):
         print('Last buy cost: {:.2f}'.format(last_buy_cost))
         sell_proceeds = sell_quote - last_buy_cost
         print('Current sell proceeds: {:.2f}'.format(sell_proceeds))
-        stop_loss = (sell_proceeds/2) + last_buy_cost
+        stop_loss = (sell_proceeds*0.75) + last_buy_cost
             
         print('Price at which turnaround is true: {:.2f}'.format(stop_loss))
 
@@ -22,7 +22,7 @@ def wait_for_price_turnaround(price_type = 'sell'):
             
             new_sell_proceeds = sell_quote - last_buy_cost
             if new_sell_proceeds > sell_proceeds:
-                stop_loss = (sell_proceeds/2) + last_buy_cost
+                stop_loss = (sell_proceeds*0.75) + last_buy_cost
                 sell_proceeds = new_sell_proceeds
                 sys.stdout.write('{}: Price (${:.2f}) still rising, new sell would currently generate ${:.2f} stop loss adjusted to ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), sell_quote, new_sell_proceeds, stop_loss))
             
@@ -36,14 +36,14 @@ def wait_for_price_turnaround(price_type = 'sell'):
         # Wait for price to stop falling
         buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
         buy_proceeds = last_sell_cost - buy_quote
-        stop_loss = last_sell_cost - (buy_proceeds/2)
+        stop_loss = last_sell_cost - (buy_proceeds*0.75)
 
         while buy_quote < stop_loss:
             buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
             
             new_buy_proceeds = last_sell_cost - buy_quote
             if new_buy_proceeds > buy_proceeds:
-                stop_loss = last_sell_cost - (buy_proceeds/2)
+                stop_loss = last_sell_cost - (buy_proceeds*0.75)
                 buy_proceeds = new_buy_proceeds
                 sys.stdout.write('{}: Price (${:.2f}) still falling, new buy would currently generate ${:.2f} (stop loss adjusted to ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_quote, new_buy_proceeds, stop_loss))
             
@@ -202,34 +202,34 @@ while(1):
     if cc_balance < chunk_size:
         # buy
         if test:
-            buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
-            cc_balance += chunk_size
+            buy_quote = trader.getBuyQuote(cc, chunk_size*2.1)[0]
+            cc_balance += chunk_size*2.1
         else:
-            buy_order = trader.buy(cc, chunk_size)
+            buy_order = trader.buy(cc, chunk_size*2.1)
             buy_quote = buy_order.total.amount
             cc_balance += float(buy_order.amount.amount)
         
         usd_balance -= buy_quote
             
-        last_buy_cost = buy_quote
-        sys.stdout.write('{}: Buying (to rebalance) - cost: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_buy_cost))
+        last_buy_cost = buy_quote/2.1
+        sys.stdout.write('{}: Buying {:.4f} {} (to rebalance) - cost: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), chunk_size*2.1, cc, last_buy_cost))
         sys.stdout.flush()
         last_sell_proceeds = trader.getSellQuote(cc, chunk_size)[0]
         
     elif usd_balance < size_of_trade_usd:
         # sell
         if test:
-            sell_quote = trader.getSellQuote(cc, chunk_size)[0]
+            sell_quote = trader.getSellQuote(cc, chunk_size*2.1)[0]
             cc_balance -= chunk_size
         else:
-            sell_order = trader.sell(cc, chunk_size)
+            sell_order = trader.sell(cc, chunk_size*2.1)
             sell_quote = sell_order.total.amount
             cc_balance -= float(sell_order.amount.amount)
         
         usd_balance += sell_quote
             
-        last_sell_proceeds = sell_quote
-        sys.stdout.write('{}: Selling (to rebalance) - proceeds: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), last_sell_proceeds))
+        last_sell_proceeds = sell_quote/2.1
+        sys.stdout.write('{}: Selling {:.4f} {} (to rebalance) - proceeds: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), chunk_size*2.1, cc, last_sell_proceeds))
         sys.stdout.flush()
         last_buy_cost = trader.getBuyQuote(cc, chunk_size)[0]
         
