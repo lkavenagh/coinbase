@@ -35,15 +35,15 @@ def wait_for_price_turnaround(price_type = 'sell'):
     elif price_type == 'buy':
         # Wait for price to stop falling
         buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
-        buy_proceeds = last_sell_cost - buy_quote
-        stop_loss = last_sell_cost - (buy_proceeds*0.75)
+        buy_proceeds = last_sell_proceeds - buy_quote
+        stop_loss = last_sell_proceeds - (buy_proceeds*0.75)
 
         while buy_quote < stop_loss:
             buy_quote = trader.getBuyQuote(cc, chunk_size)[0]
             
-            new_buy_proceeds = last_sell_cost - buy_quote
+            new_buy_proceeds = last_sell_proceeds - buy_quote
             if new_buy_proceeds > buy_proceeds:
-                stop_loss = last_sell_cost - (buy_proceeds*0.75)
+                stop_loss = last_sell_proceeds - (buy_proceeds*0.75)
                 buy_proceeds = new_buy_proceeds
                 sys.stdout.write('{}: Price (${:.2f}) still falling, new buy would currently generate ${:.2f} (stop loss adjusted to ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_quote, new_buy_proceeds, stop_loss))
             
