@@ -175,7 +175,7 @@ while(1):
             buy_order = trader.buy(cc, chunk_size)
             buy_quote = float(buy_order.total.amount)
             
-        buy_proceeds = last_sell_cost - buy_quote
+        buy_proceeds = last_sell_proceeds - buy_quote
 
         sys.stdout.write('{}: Buying - proceeds: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), buy_proceeds))
 
