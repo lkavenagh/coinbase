@@ -120,6 +120,10 @@ usd_balance = 1000
 while(1):
     sys.stdout.write('{} balance: {:,.4f}\n'.format(cc, cc_balance))
     sys.stdout.write('{} balance: {:,.4f}\n\n'.format('USD', usd_balance))
+    
+    usd_value = usd_balance + trader.getSellQuote(cc, cc_balance)[0]
+    sys.stdout.write('{}: Total USD value: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), usd_value))
+    
     sys.stdout.flush()
     
     wait_for_profitable_margin()
@@ -239,6 +243,9 @@ while(1):
         
     sys.stdout.write('{}: USD balance: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), usd_balance))
     sys.stdout.write('{}: {} balance: {:.4f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), cc, cc_balance))
+    
+    usd_value = usd_balance + trader.getSellQuote(cc, cc_balance)[0]
+    sys.stdout.write('{}: Total USD value: ${:.2f}\n'.format(time.strftime('%Y-%m-%d %H:%M:%S'), usd_value))
     
     sys.stdout.write('Finished an iteration\n')
     sys.stdout.flush()
